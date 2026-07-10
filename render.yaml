@@ -1,0 +1,21 @@
+# One-click test deployment on Render (render.com → New → Blueprint → this repo).
+# TESTING ONLY: free plan has no persistent disk, so the demo database reseeds
+# on every restart — perfect for a demo, wrong for production. Production goes
+# to Cloud Run with a volume (see README "Deployment").
+services:
+  - type: web
+    name: team-pulse
+    runtime: docker
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: DEMO_MODE
+        value: "true"
+      - key: ADMIN_PASSWORD
+        sync: false # Render asks you to type this on first deploy
+      - key: GOOGLE_CLIENT_ID
+        value: "149105754935-v4ggn23d0j1ubklcuch8fe8aaoeiu871.apps.googleusercontent.com"
+      - key: ADMIN_EMAILS
+        value: "khalid@k-brands.com,amna@k-brands.com"
+      - key: TEAM_EMAILS
+        value: "moiz@k-brands.com,ahsam@k-brands.com,ammaz@k-brands.com,amna@k-brands.com,asfandyar@k-brands.com,asghar@k-brands.com,daud@k-brands.com,fahad@k-brands.com,farzeen@k-brands.com,hassan@k-brands.com,kamran@k-brands.com,mehwish@k-brands.com,bilal@k-brands.com,faiz@k-brands.com,hamza@k-brands.com,muhammad@k-brands.com,safiullah@k-brands.com,usama@k-brands.com,vitaliy@k-brands.com,waqas@k-brands.com,wasif@k-brands.com,zeeshan@k-brands.com"
