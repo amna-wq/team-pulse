@@ -1,0 +1,617 @@
+import express from 'express';
+import crypto from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { db } from './src/db.js';
+import { currentCycle, windowState, windowFor, setOverride, DEMO_MODE } from './src/cycle.js';
+import { SLIDERS, BLOCKERS, PROCESSES, OPEN_TEXT_LABEL, sliderKeys, blockerKeys, processKeys } from './src/questions.js';
+import { draftThemes } from './src/themes.js';
+import { createPeerRouter } from './src/phase2-peer-feedback.js';
+import { sendInvites, mailConfigured, renderInviteEmail, baseUrl, gmailStatus, gmailExchangeCode, gmailDisconnect } from './src/mailer.js';
+import { fetchTeamEmails, teamSource } from './src/team.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PORT = process.env.PORT || 8080;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || (DEMO_MODE ? 'demo-admin' : null);
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+// Aggregates are hidden below this response count so a near-empty cycle can't
+// expose an almost-individual view.
+const MIN_RESPONSES_TO_SHOW = Number(process.env.MIN_RESPONSES_TO_SHOW || 5);
+const MAX_TEXT = 4000;
+
+if (!ADMIN_PASSWORD) {
+  console.error('ADMIN_PASSWORD is required (or set DEMO_MODE=true). Refusing to start without one.');
+  process.exit(1);
+}
+
+// Google sign-in for admins. Only these emails may enter; password stays as fallback.
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'khalid@k-brands.com,amna@k-brands.com')
+  .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+
+// Lightweight migrations (no-ops when the columns already exist).
+for (const sql of [
+  'ALTER TABLE tokens ADD COLUMN opened INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE recipients ADD COLUMN last_sent_at TEXT',
+  'ALTER TABLE recipients ADD COLUMN last_error TEXT',
+]) {
+  try { db.exec(sql); } catch { /* column exists */ }
+}
+
+const app = express();
+app.use(express.json({ limit: '64kb' }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ---------- helpers ----------
+
+const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
+
+function sign(value) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(value).digest('hex');
+}
+
+function setSessionCookie(res) {
+  const expires = Date.now() + 12 * 3600 * 1000;
+  const payload = `admin.${expires}`;
+  const cookie = `${payload}.${sign(payload)}`;
+  res.setHeader(
+    'Set-Cookie',
+    `pulse_admin=${cookie}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${12 * 3600}`
+  );
+}
+
+function isAdmin(req) {
+  const raw = (req.headers.cookie || '')
+    .split(';')
+    .map((c) => c.trim())
+    .find((c) => c.startsWith('pulse_admin='));
+  if (!raw) return false;
+  const parts = raw.slice('pulse_admin='.length).split('.');
+  if (parts.length !== 3) return false;
+  const [tag, expires, sig] = parts;
+  const payload = `${tag}.${expires}`;
+  const expected = sign(payload);
+  if (sig.length !== expected.length) return false;
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false;
+  return tag === 'admin' && Number(expires) > Date.now();
+}
+
+function requireAdmin(req, res, next) {
+  if (!isAdmin(req)) return res.status(401).json({ error: 'Not signed in' });
+  next();
+}
+
+// Fisher-Yates. Comments are shuffled on every read so their display order
+// never reflects submission order.
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function cycleAggregates(cycle) {
+  const rows = db.prepare('SELECT * FROM responses WHERE cycle = ?').all(cycle);
+  const count = rows.length;
+  const averages = {};
+  for (const k of sliderKeys) {
+    averages[k] = count ? rows.reduce((s, r) => s + r[k], 0) / count : null;
+  }
+  const blockers = Object.fromEntries(blockerKeys.map((k) => [k, 0]));
+  const processes = Object.fromEntries(processKeys.map((k) => [k, 0]));
+  for (const r of rows) {
+    if (r.blocker in blockers) blockers[r.blocker]++;
+    if (r.process_improvement in processes) processes[r.process_improvement]++;
+  }
+  const comments = rows.map((r) => r.open_text).filter((t) => t && t.trim());
+  const concerns = rows
+    .filter((r) => r.concern && r.concern.trim())
+    .map((r) => ({ text: r.concern, urgent: !!r.concern_urgent }));
+  const upward = {
+    start: rows.map((r) => r.upward_start).filter((t) => t && t.trim()),
+    stop: rows.map((r) => r.upward_stop).filter((t) => t && t.trim()),
+    continue: rows.map((r) => r.upward_continue).filter((t) => t && t.trim()),
+  };
+  return { count, averages, blockers, processes, comments, concerns, upward };
+}
+
+// ---------- public API ----------
+
+app.get('/api/meta', (req, res) => {
+  res.json({
+    sliders: SLIDERS,
+    blockers: BLOCKERS,
+    processes: PROCESSES,
+    openTextLabel: OPEN_TEXT_LABEL,
+    demoMode: DEMO_MODE,
+    peerModuleEnabled: process.env.MANAGEMENT_SPONSORED === 'true',
+    googleClientId: GOOGLE_CLIENT_ID,
+    window: windowState(),
+  });
+});
+
+// Check a survey link before showing the form.
+app.get('/api/survey/state', (req, res) => {
+  const token = String(req.query.token || '');
+  const win = windowState();
+  if (!token) return res.json({ valid: false, window: win });
+  const row = db.prepare('SELECT used, cycle FROM tokens WHERE token_hash = ?').get(sha256(token));
+  // Aggregate-only open tracking: flip a flag on the token, never tied to a person.
+  if (row && row.cycle === win.cycle) {
+    db.prepare('UPDATE tokens SET opened = 1 WHERE token_hash = ?').run(sha256(token));
+  }
+  res.json({
+    valid: !!row && row.cycle === win.cycle,
+    used: row ? !!row.used : false,
+    window: win,
+  });
+});
+
+app.post('/api/survey/submit', (req, res) => {
+  const win = windowState();
+  if (!win.open) return res.status(403).json({ error: 'The survey window is closed.' });
+
+  const b = req.body || {};
+  const token = String(b.token || '');
+  if (!token) return res.status(400).json({ error: 'Missing survey link token.' });
+
+  // Validate answers.
+  const values = {};
+  for (const k of sliderKeys) {
+    const v = Number(b[k]);
+    if (!Number.isInteger(v) || v < 1 || v > 10) {
+      return res.status(400).json({ error: 'Every slider needs a value from 1 to 10.' });
+    }
+    values[k] = v;
+  }
+  if (!blockerKeys.includes(b.blocker)) return res.status(400).json({ error: 'Pick a blocker.' });
+  if (!processKeys.includes(b.process_improvement)) {
+    return res.status(400).json({ error: 'Pick a process to improve.' });
+  }
+  const clip = (t) => (typeof t === 'string' ? t.trim().slice(0, MAX_TEXT) : '');
+  const openText = clip(b.open_text);
+  const concern = clip(b.concern) || null;
+  const concernUrgent = concern && b.concern_urgent ? 1 : 0;
+  const upwardOptIn = !!b.upward_opt_in;
+  const upStart = upwardOptIn ? clip(b.upward_start) || null : null;
+  const upStop = upwardOptIn ? clip(b.upward_stop) || null : null;
+  const upContinue = upwardOptIn ? clip(b.upward_continue) || null : null;
+
+  // ANONYMITY-CRITICAL TRANSACTION: the token is only flipped to used; the
+  // response row is inserted with no reference to it. These two writes are
+  // the only place the two tables are touched together, and no identifier
+  // crosses between them.
+  db.exec('BEGIN');
+  try {
+    const upd = db
+      .prepare('UPDATE tokens SET used = 1 WHERE token_hash = ? AND cycle = ? AND used = 0')
+      .run(sha256(token), win.cycle);
+    if (upd.changes !== 1) {
+      db.exec('ROLLBACK');
+      const existing = db.prepare('SELECT used FROM tokens WHERE token_hash = ?').get(sha256(token));
+      if (existing && existing.used) {
+        return res.status(409).json({ error: 'This link has already been used. Responses cannot be edited after submission.' });
+      }
+      return res.status(403).json({ error: 'This survey link is not valid for the current cycle.' });
+    }
+    db.prepare(
+      `INSERT INTO responses
+         (cycle, q_heard, q_equipped, q_workload, q_communication, q_meetings, q_safe,
+          blocker, process_improvement, open_text, upward_start, upward_stop, upward_continue,
+          concern, concern_urgent)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      win.cycle,
+      values.q_heard, values.q_equipped, values.q_workload,
+      values.q_communication, values.q_meetings, values.q_safe,
+      b.blocker, b.process_improvement, openText, upStart, upStop, upContinue,
+      concern, concernUrgent
+    );
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  res.json({ ok: true });
+});
+
+// The published team summary — themes, action, and playful AGGREGATE fun
+// facts (about problems and team-level scores, never people). Individual
+// responses and concerns never appear here.
+app.get('/api/summary/latest', (req, res) => {
+  const row = db
+    .prepare('SELECT cycle, theme1, theme2, theme3, action, published_at FROM summaries WHERE published = 1 ORDER BY cycle DESC LIMIT 1')
+    .get();
+  if (!row) return res.json({ summary: null });
+  const agg = cycleAggregates(row.cycle);
+  let fun = null;
+  if (agg.count >= MIN_RESPONSES_TO_SHOW) {
+    const topBlocker = Object.entries(agg.blockers).sort((a, b) => b[1] - a[1])[0];
+    const strongest = SLIDERS.map((s) => ({ label: s.label, avg: agg.averages[s.key] }))
+      .sort((a, b) => b.avg - a.avg)[0];
+    // Most-improved slider vs the previous cycle (if it has enough responses).
+    const prevCycle = db
+      .prepare('SELECT DISTINCT cycle FROM responses WHERE cycle < ? ORDER BY cycle DESC LIMIT 1')
+      .get(row.cycle)?.cycle;
+    let mostImproved = null;
+    if (prevCycle) {
+      const prev = cycleAggregates(prevCycle);
+      if (prev.count >= MIN_RESPONSES_TO_SHOW) {
+        const best = SLIDERS.map((s) => ({
+          label: s.label,
+          delta: agg.averages[s.key] - prev.averages[s.key],
+        })).sort((a, b) => b.delta - a.delta)[0];
+        if (best.delta >= 0.1) mostImproved = { label: best.label, delta: best.delta };
+      }
+    }
+    fun = {
+      topBlocker: topBlocker && topBlocker[1] > 0
+        ? { label: BLOCKERS.find((b) => b.key === topBlocker[0])?.label || topBlocker[0], count: topBlocker[1] }
+        : null,
+      strongest: { label: strongest.label, avg: strongest.avg },
+      mostImproved,
+    };
+  }
+  res.json({ summary: { ...row, responses: agg.count, fun } });
+});
+
+// ---------- admin API ----------
+
+app.post('/api/admin/login', (req, res) => {
+  const given = String(req.body?.password || '');
+  const a = sha256(given);
+  const b2 = sha256(ADMIN_PASSWORD);
+  if (!crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b2))) {
+    return res.status(401).json({ error: 'Wrong password.' });
+  }
+  setSessionCookie(res);
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/session', (req, res) => res.json({ admin: isAdmin(req) }));
+
+// Google sign-in: the browser sends a Google ID token; we verify it with
+// Google, then check the email against the allowlist.
+app.post('/api/admin/google-login', async (req, res) => {
+  try {
+    if (!GOOGLE_CLIENT_ID) {
+      return res.status(400).json({ error: 'Google sign-in is not configured yet. Add GOOGLE_CLIENT_ID to .env (see README).' });
+    }
+    const credential = String(req.body?.credential || '');
+    if (!credential) return res.status(400).json({ error: 'Missing Google credential.' });
+    const r = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential));
+    if (!r.ok) return res.status(401).json({ error: 'Google rejected the sign-in.' });
+    const info = await r.json();
+    if (info.aud !== GOOGLE_CLIENT_ID) return res.status(401).json({ error: 'Sign-in token belongs to a different app.' });
+    if (info.email_verified !== 'true' && info.email_verified !== true) {
+      return res.status(401).json({ error: 'Google account email is not verified.' });
+    }
+    const email = String(info.email || '').toLowerCase();
+    if (!ADMIN_EMAILS.includes(email)) {
+      return res.status(403).json({ error: `${email} is not on the admin list.` });
+    }
+    setSessionCookie(res);
+    res.json({ ok: true, email });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/overview', requireAdmin, (req, res) => {
+  const win = windowState();
+  const cycle = String(req.query.cycle || win.cycle);
+  if (!/^\d{4}-\d{2}$/.test(cycle)) return res.status(400).json({ error: 'Bad cycle.' });
+
+  const agg = cycleAggregates(cycle);
+  const visible = agg.count >= MIN_RESPONSES_TO_SHOW;
+
+  const tokens = db
+    .prepare('SELECT COUNT(*) AS issued, COALESCE(SUM(used), 0) AS used, COALESCE(SUM(opened), 0) AS opened FROM tokens WHERE cycle = ?')
+    .get(cycle);
+
+  // Trend: per-slider averages for every past cycle with enough responses.
+  const cycles = db
+    .prepare('SELECT DISTINCT cycle FROM responses ORDER BY cycle')
+    .all()
+    .map((r) => r.cycle);
+  const trends = Object.fromEntries(sliderKeys.map((k) => [k, []]));
+  for (const c of cycles) {
+    const n = db.prepare('SELECT COUNT(*) AS n FROM responses WHERE cycle = ?').get(c).n;
+    if (n < MIN_RESPONSES_TO_SHOW) continue;
+    for (const k of sliderKeys) {
+      const avg = db.prepare(`SELECT AVG(${k}) AS a FROM responses WHERE cycle = ?`).get(c).a;
+      trends[k].push({ cycle: c, avg, n });
+    }
+  }
+
+  const summary =
+    db.prepare('SELECT * FROM summaries WHERE cycle = ?').get(cycle) || null;
+
+  res.json({
+    cycle,
+    window: win,
+    minResponsesToShow: MIN_RESPONSES_TO_SHOW,
+    tokens,
+    count: agg.count,
+    visible,
+    averages: visible ? agg.averages : null,
+    blockers: visible ? agg.blockers : null,
+    processes: visible ? agg.processes : null,
+    comments: visible ? shuffle(agg.comments) : null,
+    concerns: visible
+      ? [...shuffle(agg.concerns.filter((c) => c.urgent)), ...shuffle(agg.concerns.filter((c) => !c.urgent))]
+      : null,
+    upward: visible
+      ? { start: shuffle(agg.upward.start), stop: shuffle(agg.upward.stop), continue: shuffle(agg.upward.continue) }
+      : null,
+    trends,
+    cycles,
+    summary,
+    demoMode: DEMO_MODE,
+  });
+});
+
+app.post('/api/admin/tokens', requireAdmin, (req, res) => {
+  const count = Number(req.body?.count);
+  if (!Number.isInteger(count) || count < 1 || count > 200) {
+    return res.status(400).json({ error: 'Count must be 1-200.' });
+  }
+  const cycle = currentCycle();
+  const insert = db.prepare('INSERT INTO tokens (token_hash, cycle) VALUES (?, ?)');
+  const raw = [];
+  for (let i = 0; i < count; i++) {
+    const t = crypto.randomBytes(16).toString('base64url');
+    insert.run(sha256(t), cycle);
+    raw.push(t);
+  }
+  // Raw tokens are returned ONCE and never stored — only their hashes are.
+  res.json({ cycle, tokens: raw });
+});
+
+app.post('/api/admin/window', requireAdmin, (req, res) => {
+  const state = req.body?.state;
+  if (![null, 'open', 'closed'].includes(state)) {
+    return res.status(400).json({ error: "state must be 'open', 'closed', or null (automatic)." });
+  }
+  setOverride(currentCycle(), state);
+  res.json({ ok: true, window: windowState() });
+});
+
+app.get('/api/admin/summary/draft', requireAdmin, (req, res) => {
+  const cycle = String(req.query.cycle || currentCycle());
+  const agg = cycleAggregates(cycle);
+  if (agg.count < MIN_RESPONSES_TO_SHOW) {
+    return res.status(400).json({ error: `Need at least ${MIN_RESPONSES_TO_SHOW} responses to draft themes.` });
+  }
+  res.json({ themes: draftThemes(agg) });
+});
+
+app.post('/api/admin/summary', requireAdmin, (req, res) => {
+  const { cycle, theme1 = '', theme2 = '', theme3 = '', action = '', publish = false } = req.body || {};
+  if (!/^\d{4}-\d{2}$/.test(String(cycle))) return res.status(400).json({ error: 'Bad cycle.' });
+  const clip = (t) => String(t || '').trim().slice(0, MAX_TEXT);
+  db.prepare(
+    `INSERT INTO summaries (cycle, theme1, theme2, theme3, action, published, published_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(cycle) DO UPDATE SET
+       theme1 = excluded.theme1, theme2 = excluded.theme2, theme3 = excluded.theme3,
+       action = excluded.action, published = excluded.published,
+       published_at = COALESCE(excluded.published_at, summaries.published_at)`
+  ).run(cycle, clip(theme1), clip(theme2), clip(theme3), clip(action), publish ? 1 : 0, publish ? new Date().toISOString() : null);
+  res.json({ ok: true });
+});
+
+// ---------- email invites ----------
+
+app.get('/api/admin/recipients', requireAdmin, (req, res) => {
+  const cycle = currentCycle();
+  const counts = db
+    .prepare('SELECT COUNT(*) AS issued, COALESCE(SUM(opened), 0) AS opened, COALESCE(SUM(used), 0) AS used FROM tokens WHERE cycle = ?')
+    .get(cycle);
+  res.json({
+    // Per-person: only delivery status. Opened/submitted stay aggregate-only by design.
+    recipients: db.prepare('SELECT email, last_sent_at, last_error FROM recipients ORDER BY email').all(),
+    counts,
+    mailConfigured: mailConfigured(),
+    gmail: gmailStatus(),
+    autoEmail: process.env.AUTO_EMAIL === 'true',
+    lastSend: db.prepare('SELECT * FROM email_log WHERE cycle = ?').get(cycle) || null,
+    teamSyncedAt: db.prepare("SELECT value FROM settings WHERE key = 'team_synced_at'").get()?.value || null,
+    teamSource: teamSource(),
+  });
+});
+
+// Refresh the recipient list from the BigQuery roster. Existing rows keep
+// their delivery status; people who left the roster are removed.
+function syncTeamFromBQ(emails) {
+  db.exec('BEGIN');
+  try {
+    const ins = db.prepare('INSERT INTO recipients (email) VALUES (?) ON CONFLICT(email) DO NOTHING');
+    for (const e of emails) ins.run(e);
+    const del = db.prepare(
+      `DELETE FROM recipients WHERE email NOT IN (${emails.map(() => '?').join(',')})`
+    );
+    del.run(...emails);
+    db.prepare(
+      "INSERT INTO settings (key, value) VALUES ('team_synced_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    ).run(new Date().toISOString());
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+}
+
+app.post('/api/admin/recipients-sync', requireAdmin, async (req, res) => {
+  try {
+    const emails = await fetchTeamEmails();
+    syncTeamFromBQ(emails);
+    res.json({ ok: true, count: emails.length });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// One-time Gmail connection: the browser's Google popup hands us a code, we
+// swap it for a refresh token so the 27th can send without anyone present.
+app.post('/api/admin/gmail-connect', requireAdmin, async (req, res) => {
+  try {
+    const { user } = await gmailExchangeCode(String(req.body?.code || ''));
+    res.json({ ok: true, user });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/gmail-disconnect', requireAdmin, (req, res) => {
+  gmailDisconnect();
+  res.json({ ok: true });
+});
+
+// Record per-recipient delivery status after a send (delivery only, no tokens).
+function recordSendResults(results) {
+  const upd = db.prepare('UPDATE recipients SET last_sent_at = ?, last_error = ? WHERE email = ?');
+  const now = new Date().toISOString();
+  for (const r of results || []) upd.run(r.ok ? now : null, r.ok ? null : r.error || 'send failed', r.email);
+}
+
+app.post('/api/admin/recipients', requireAdmin, (req, res) => {
+  const emails = [...new Set(
+    String(req.body?.emails || '')
+      .split(/[\n,;]+/)
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+  )];
+  if (emails.length > 200) return res.status(400).json({ error: 'Max 200 recipients.' });
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM recipients').run();
+    const ins = db.prepare('INSERT INTO recipients (email) VALUES (?)');
+    for (const e of emails) ins.run(e);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  res.json({ ok: true, count: emails.length });
+});
+
+app.post('/api/admin/email-test', requireAdmin, async (req, res) => {
+  const email = String(req.body?.email || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email.' });
+  try {
+    const result = await sendInvites([email]);
+    if (result.failed.length) return res.status(502).json({ error: `Send failed: ${result.failed[0].error}` });
+    res.json({ ok: true, sent: result.sent });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/email-send', requireAdmin, async (req, res) => {
+  const cycle = currentCycle();
+  const already = db.prepare('SELECT * FROM email_log WHERE cycle = ?').get(cycle);
+  if (already && !req.body?.force) {
+    return res.status(409).json({
+      error: `Invites for ${cycle} already went out on ${new Date(already.sent_at).toLocaleString()} (${already.sent_count} sent). Re-sending would give people second links.`,
+    });
+  }
+  const emails = db.prepare('SELECT email FROM recipients').all().map((r) => r.email);
+  if (!emails.length) return res.status(400).json({ error: 'No recipients saved yet.' });
+  try {
+    const result = await sendInvites(emails);
+    recordSendResults(result.results);
+    db.prepare(
+      'INSERT INTO email_log (cycle, sent_at, sent_count) VALUES (?, ?, ?) ON CONFLICT(cycle) DO UPDATE SET sent_at = excluded.sent_at, sent_count = excluded.sent_count'
+    ).run(cycle, new Date().toISOString(), result.sent);
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Rendered preview of the invite email (fake link, nothing minted).
+app.get('/admin/email-preview', (req, res) => {
+  if (!isAdmin(req)) return res.redirect('/admin');
+  const { closes } = windowState();
+  res.send(renderInviteEmail({ link: `${baseUrl()}/s/example-preview-link`, closes }));
+});
+
+// Auto-send: when the monthly window opens, invites go out once per cycle.
+// Requires AUTO_EMAIL=true + SMTP config; never runs in demo mode (the demo
+// window is always "open" and would spam the roster).
+async function autoEmailTick() {
+  if (process.env.AUTO_EMAIL !== 'true' || DEMO_MODE || !mailConfigured()) return;
+  const win = windowState();
+  if (!win.open) return;
+  if (db.prepare('SELECT 1 FROM email_log WHERE cycle = ?').get(win.cycle)) return;
+  // Freshen the list from BigQuery right before sending, so joiners/leavers
+  // are always up to date. If BQ is unreachable, fall back to the stored list.
+  try {
+    syncTeamFromBQ(await fetchTeamEmails());
+  } catch (e) {
+    console.warn('[auto-email] BQ sync failed, using stored list:', e.message);
+  }
+  const emails = db.prepare('SELECT email FROM recipients').all().map((r) => r.email);
+  if (!emails.length) return;
+  const result = await sendInvites(emails);
+  recordSendResults(result.results);
+  db.prepare('INSERT INTO email_log (cycle, sent_at, sent_count) VALUES (?, ?, ?)')
+    .run(win.cycle, new Date().toISOString(), result.sent);
+  console.log(`[auto-email] ${win.cycle}: sent ${result.sent} invites${result.failed.length ? `, ${result.failed.length} failed` : ''}`);
+}
+setInterval(() => autoEmailTick().catch((e) => console.error('[auto-email]', e.message)), 10 * 60 * 1000);
+setTimeout(() => autoEmailTick().catch((e) => console.error('[auto-email]', e.message)), 5000);
+
+// Auto-summary: when a cycle's window has closed and enough responses exist,
+// the monthly team summary generates and publishes itself. Zero clicks.
+function prevCycleOf(cycle) {
+  const [y, m] = cycle.split('-').map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function autoPublishTick() {
+  if (DEMO_MODE) return; // demo window never closes
+  const now = new Date();
+  const current = currentCycle(now);
+  for (const cycle of [current, prevCycleOf(current)]) {
+    const { closes } = windowFor(cycle);
+    if (now < closes) continue;
+    const existing = db.prepare('SELECT published FROM summaries WHERE cycle = ?').get(cycle);
+    if (existing?.published) continue;
+    const agg = cycleAggregates(cycle);
+    if (agg.count < MIN_RESPONSES_TO_SHOW) continue;
+    const themes = draftThemes(agg);
+    db.prepare(
+      `INSERT INTO summaries (cycle, theme1, theme2, theme3, action, published, published_at)
+       VALUES (?, ?, ?, ?, ?, 1, ?)
+       ON CONFLICT(cycle) DO UPDATE SET
+         theme1 = excluded.theme1, theme2 = excluded.theme2, theme3 = excluded.theme3,
+         action = excluded.action, published = 1,
+         published_at = COALESCE(summaries.published_at, excluded.published_at)`
+    ).run(
+      cycle, themes[0] || '', themes[1] || '', themes[2] || '',
+      'Management is reading every response and will announce this month\'s committed action.',
+      now.toISOString()
+    );
+    console.log(`[auto-summary] published ${cycle} (${agg.count} responses)`);
+  }
+}
+setInterval(() => { try { autoPublishTick(); } catch (e) { console.error('[auto-summary]', e.message); } }, 10 * 60 * 1000);
+setTimeout(() => { try { autoPublishTick(); } catch (e) { console.error('[auto-summary]', e.message); } }, 8000);
+
+// Phase 2 — peer feedback module, gated behind MANAGEMENT_SPONSORED.
+app.use('/api/peer-feedback', createPeerRouter({ requireAdmin }));
+
+// ---------- pages ----------
+
+app.get('/s/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'survey.html')));
+app.get('/p/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'peer.html')));
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+app.get('/summary', (req, res) => res.sendFile(path.join(__dirname, 'public', 'summary.html')));
+
+app.listen(PORT, () => {
+  console.log(`Team Pulse listening on http://localhost:${PORT}${DEMO_MODE ? ' (DEMO MODE — fake data, window forced open)' : ''}`);
+});

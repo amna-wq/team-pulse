@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Peer feedback — Team Pulse</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <h1>Peer feedback</h1>
+  <p class="sub">Start / stop / continue — in words, colleague by colleague. All fields optional.</p>
+
+  <div id="gate" class="card">Checking your link…</div>
+
+  <form id="peer-form" class="hidden">
+    <div class="banner info">
+      <strong>Anonymous, private, words only.</strong> What you write about a colleague is delivered
+      privately to that person and their manager — never to the team, never as a score.
+      Nothing connects your link to what you write. Make it something they can act on:
+      a behavior, not a verdict.
+    </div>
+    <div id="people"></div>
+    <div id="submit-err" class="banner err hidden"></div>
+    <div class="btnrow">
+      <button type="submit" id="submit-btn">Submit — final, can't be edited</button>
+    </div>
+    <p class="hint">Skip anyone you have nothing useful to say about — empty sections are simply not sent.</p>
+  </form>
+
+  <div id="done" class="card hidden">
+    <h2>Thank you 🙏</h2>
+    <p>Your feedback is in. Each person will privately receive what was written about them —
+    with no way to know who wrote what.</p>
+  </div>
+
+  <footer>Team Pulse · peer feedback (management-sponsored)</footer>
+</main>
+<script src="/confetti.js"></script>
+<script src="/peer.js"></script>
+</body>
+</html>

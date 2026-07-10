@@ -1,0 +1,19 @@
+{
+  "name": "team-pulse",
+  "version": "1.0.0",
+  "description": "Team Pulse & Feedback — monthly anonymous team health survey (aggregates only, never individuals)",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js",
+    "seed": "node seed.js",
+    "demo": "node seed.js && DEMO_MODE=true node --env-file-if-exists=.env server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "nodemailer": "^9.0.3"
+  }
+}

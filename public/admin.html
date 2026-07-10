@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Team Pulse · Admin</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+<main class="wide">
+  <header class="admin-head">
+    <h1 class="admin-title">Team <span class="grad">Pulse</span></h1>
+    <p class="sub">The team's honest read on how work feels, for Khalid and Amna to act on. Team-level only, never per person.</p>
+  </header>
+  <div id="demo-banner" class="banner demo hidden">DEMO MODE: fake seeded data, survey window forced open.</div>
+
+  <div id="login" class="card hidden" style="max-width:440px;margin-left:auto;margin-right:auto;text-align:center">
+    <h2>Sign in</h2>
+    <p class="hint">Only <strong>khalid@k-brands.com</strong> and <strong>amna@k-brands.com</strong> can enter.</p>
+    <div id="gsi-btn" style="display:flex;justify-content:center;margin:14px 0"></div>
+    <div id="gsi-unavailable" class="hint hidden"></div>
+    <details style="margin-top:12px;text-align:left">
+      <summary class="hint" style="cursor:pointer">Password fallback</summary>
+      <label class="q" for="pw" style="margin-top:10px">Admin password</label>
+      <input type="password" id="pw" autocomplete="current-password">
+      <div class="btnrow"><button class="secondary" id="login-btn">Sign in with password</button></div>
+    </details>
+    <div id="login-err" class="banner err hidden"></div>
+  </div>
+
+  <div id="dash" class="hidden">
+
+    <div class="card monthbar">
+      <div class="monthpick">
+        <label class="q" for="cycle-select" style="margin:0">Viewing</label>
+        <select id="cycle-select"></select>
+      </div>
+      <div style="flex:1"></div>
+      <div style="text-align:right">
+        <span id="window-pill" class="pill"></span>
+        <div class="hint" id="window-detail" style="margin-top:6px"></div>
+      </div>
+    </div>
+
+    <div class="tiles" id="tiles"></div>
+
+    <div id="too-few" class="card hidden">
+      <h2>Not enough responses yet</h2>
+      <p id="too-few-msg"></p>
+    </div>
+
+    <div id="results">
+      <div class="card">
+        <h2>How the team is doing <span class="hint" style="display:inline">(average out of 10, vs previous month)</span></h2>
+        <div id="avg-bars"></div>
+      </div>
+
+      <div class="card">
+        <h2>Trend over months</h2>
+        <div class="sparks" id="sparks"></div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h2>Biggest blocker this month</h2>
+          <div id="blocker-bars"></div>
+        </div>
+        <div class="card">
+          <h2>Process that needs improvement</h2>
+          <div id="process-bars"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Comments <span class="hint" style="display:inline">(anonymous, shown in random order)</span></h2>
+        <div id="comments"></div>
+      </div>
+
+      <div class="card">
+        <h2>Private concerns <span class="hint" style="display:inline">(management-only, never on the team summary)</span></h2>
+        <div id="concerns"></div>
+      </div>
+
+      <div class="card" id="upward-card">
+        <h2>Upward feedback for management <span class="hint" style="display:inline">(opt-in)</span></h2>
+        <div id="upward"></div>
+      </div>
+
+      <div class="card" id="summary-card">
+        <h2>Monthly team summary <span class="hint" style="display:inline">(publishes itself)</span></h2>
+        <p class="hint">When the window closes, the top themes are generated from the data and published to the
+        <a href="/summary" target="_blank">team summary page</a> automatically. Nothing to do here.</p>
+        <div id="summary-view"></div>
+      </div>
+    </div>
+
+    <div class="card" id="email-card">
+      <h2>Invites <span class="hint" style="display:inline">(automatic on the 27th)</span></h2>
+      <div id="mail-status" class="banner info" style="margin-top:0"></div>
+      <div id="gmail-area" class="btnrow" style="margin-top:0"></div>
+      <div id="invite-counts" class="countrow"></div>
+      <div id="recipient-status"></div>
+      <div class="btnrow" style="margin-top:10px;align-items:center;gap:12px">
+        <button class="secondary btn-sm" id="team-sync">🔄 Sync team</button>
+        <span class="hint" id="team-sync-note" style="align-self:center;margin:0"></span>
+      </div>
+      <label class="q" for="test-email">Send a test invite to one address</label>
+      <div class="btnrow" style="margin-top:0">
+        <input type="email" id="test-email" style="max-width:320px" placeholder="you@k-brands.com">
+        <button class="secondary" id="email-test">Send test</button>
+        <a href="/admin/email-preview" target="_blank" style="align-self:center;font-weight:700">Preview the email ↗</a>
+      </div>
+      <div id="email-msg" class="banner hidden" style="margin-bottom:0"></div>
+    </div>
+
+  </div>
+  <footer>Team Pulse admin · no per-person data exists anywhere in this app</footer>
+</main>
+<script src="/admin.js"></script>
+</body>
+</html>

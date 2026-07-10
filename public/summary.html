@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Team Pulse — this month</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    /* this hero is shorter than the survey's — push the floats to the corners */
+    .hero { padding-top: 52px; }
+    .hero-title, .hero-sub { position: relative; z-index: 1; }
+    .hero .float:nth-child(1) { top: 0; left: 2%; }
+    .hero .float:nth-child(2) { top: 6%; right: 3%; }
+    .hero .float:nth-child(3) { bottom: 2%; left: 9%; }
+    .hero .float:nth-child(4) { bottom: 8%; right: 10%; }
+  </style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <span class="float">📣</span>
+    <span class="float">✨</span>
+    <span class="float">💬</span>
+    <span class="float">🎉</span>
+    <h1 class="hero-title">You spoke.<br><span class="grad">We listened.</span></h1>
+    <p class="hero-sub" id="hero-sub"></p>
+  </header>
+
+  <div id="out"></div>
+
+  <footer>Team Pulse · anonymous, always</footer>
+</main>
+<script src="/reveal.js"></script>
+<script>
+(async () => {
+  const { summary } = await (await fetch('/api/summary/latest')).json();
+  const out = document.getElementById('out');
+  const esc = (s) => (s || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  if (!summary) {
+    document.getElementById('hero-sub').textContent = 'The next pulse lands soon.';
+    out.innerHTML = `<div class="card reveal" style="text-align:center">
+      <div style="font-size:40px">💤</div>
+      <p style="margin:8px 0 0">Nothing here yet — results appear right after the monthly pulse closes.</p>
+    </div>`;
+    observeNew();
+    return;
+  }
+
+  const [y, m] = summary.cycle.split('-').map(Number);
+  const month = new Date(y, m - 1, 1).toLocaleString(undefined, { month: 'long', year: 'numeric' });
+  document.getElementById('hero-sub').textContent = `${month} · ${summary.responses} anonymous voices · every word was read`;
+
+  const themes = [summary.theme1, summary.theme2, summary.theme3].filter(Boolean);
+  const big3 = themes.length ? `
+    <span class="section-eyebrow reveal">The 3 things you told us the loudest</span>
+    ${themes.map((t, i) => `
+      <div class="b3card reveal" style="--d:${i * 0.09}s">
+        <div class="b3num">${i + 1}</div>
+        <p>${esc(t)}</p>
+      </div>`).join('')}` : '';
+
+  let awards = '';
+  if (summary.fun) {
+    const f = summary.fun;
+    const cards = [];
+    if (f.topBlocker) cards.push({ emoji: '🏆', label: 'Blocker of the month', value: `${esc(f.topBlocker.label)} · ${f.topBlocker.count} votes` });
+    if (f.mostImproved) cards.push({ emoji: '📈', label: 'Most improved', value: `${esc(f.mostImproved.label)} · +${f.mostImproved.delta.toFixed(1)}` });
+    if (f.strongest) cards.push({ emoji: '💪', label: 'Strongest area', value: `${esc(f.strongest.label)} · ${f.strongest.avg.toFixed(1)}/10` });
+    if (cards.length) {
+      awards = `
+        <span class="section-eyebrow reveal">And the awards go to…</span>
+        <div class="fun-grid">${cards.map((c, i) =>
+          `<div class="fun reveal" style="--d:${i * 0.09}s"><div class="emoji">${c.emoji}</div><div class="label">${c.label}</div><div class="value">${c.value}</div></div>`).join('')}
+        </div>`;
+    }
+  }
+
+  out.innerHTML = big3 + awards;
+  observeNew();
+
+  // Elements were injected after reveal.js ran — observe them now.
+  function observeNew() {
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const els = document.querySelectorAll('#out .reveal');
+    if (reduced) { els.forEach((el) => el.classList.add('in-view')); return; }
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in-view'); io.unobserve(e.target); }
+    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+    els.forEach((el) => io.observe(el));
+  }
+})();
+</script>
+</body>
+</html>
