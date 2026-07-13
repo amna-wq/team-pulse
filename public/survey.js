@@ -34,10 +34,9 @@ const scoreColor = (v) => (v <= 3 ? '#d6453d' : v <= 6 ? '#e0862f' : v <= 8 ? '#
 
 function paint(input, bubble) {
   const v = Number(input.value);
-  const c = scoreColor(v);
-  input.style.setProperty('--fill', c);
+  // Chip stays in the calm blue theme; the chip text carries the score color.
   input.style.setProperty('--pct', `${((v - 1) / 9) * 100}%`);
-  bubble.style.background = c;
+  bubble.style.color = scoreColor(v);
   bubble.textContent = v;
 }
 
