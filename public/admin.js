@@ -227,9 +227,9 @@ function sparkCard(s) {
        data-tip="${monthName(p.cycle)}: ${p.avg.toFixed(1)} (${p.n} responses)"/>`).join('');
   return `<div class="spark"><div class="label">${s.label}</div>
     <svg viewBox="0 0 ${W} ${H}" aria-label="${s.label} trend">
-      <line x1="${PAD}" y1="${y(5.5).toFixed(1)}" x2="${W - PAD}" y2="${y(5.5).toFixed(1)}" stroke="#e9e8f0" stroke-width="1"/>
+      <line x1="${PAD}" y1="${y(5.5).toFixed(1)}" x2="${W - PAD}" y2="${y(5.5).toFixed(1)}" stroke="#e5e7eb" stroke-width="1"/>
       <path d="${path}" fill="none" stroke="${c}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="${x(pts.length - 1).toFixed(1)}" cy="${y(last.avg).toFixed(1)}" r="6" fill="#fffefc"/>
+      <circle cx="${x(pts.length - 1).toFixed(1)}" cy="${y(last.avg).toFixed(1)}" r="6" fill="#ffffff"/>
       <circle cx="${x(pts.length - 1).toFixed(1)}" cy="${y(last.avg).toFixed(1)}" r="4" fill="${c}"/>
       ${circles}
     </svg>
