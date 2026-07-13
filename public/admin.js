@@ -319,18 +319,27 @@ async function renderEmail() {
     btn.className = 'btn-sm push-right';
     btn.textContent = 'Disconnect Gmail';
     btn.title = d.gmail.user ? `Connected as ${d.gmail.user}` : 'Connected';
+    if (d.sheetUrl) {
+      const a = document.createElement('a');
+      a.href = d.sheetUrl;
+      a.target = '_blank';
+      a.textContent = '📊 Results sheet';
+      a.style.cssText = 'align-self:center;font-weight:700;margin-left:auto';
+      btn.classList.remove('push-right');
+      $('invite-counts').appendChild(a);
+    }
     btn.addEventListener('click', async () => {
       await api('/api/admin/gmail-disconnect', { method: 'POST' });
       renderEmail();
     });
     $('invite-counts').appendChild(btn);
   } else if (d.gmail.available) {
-    area.innerHTML = '<button id="gmail-connect">🔗 Connect Gmail — one click, done forever</button>';
+    area.innerHTML = '<button id="gmail-connect">🔗 Connect Google — sends invites + saves results to your Sheet</button>';
     area.querySelector('#gmail-connect').addEventListener('click', () => {
       if (!window.google?.accounts?.oauth2) return emailMsg('Google script not loaded — check your connection and refresh.', true);
       google.accounts.oauth2.initCodeClient({
         client_id: meta.googleClientId,
-        scope: 'https://www.googleapis.com/auth/gmail.send openid email',
+        scope: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file openid email',
         ux_mode: 'popup',
         callback: async (resp) => {
           if (!resp.code) return emailMsg('Google connection was cancelled.', true);
@@ -339,7 +348,7 @@ async function renderEmail() {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ code: resp.code }),
             });
-            emailMsg(`Gmail connected${r.user ? ' as ' + r.user : ''} — invites can now send themselves. 🎉`);
+            emailMsg(`Google connected${r.user ? ' as ' + r.user : ''} — invites send themselves, results mirror to your Sheet. 🎉`);
             renderEmail();
           } catch (e) {
             emailMsg(e.message, true);

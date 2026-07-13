@@ -9,6 +9,7 @@ import { draftThemes } from './src/themes.js';
 import { createPeerRouter } from './src/phase2-peer-feedback.js';
 import { sendInvites, mailConfigured, renderInviteEmail, baseUrl, gmailStatus, gmailExchangeCode, gmailDisconnect } from './src/mailer.js';
 import { fetchTeamEmails, teamSource } from './src/team.js';
+import { queueSync, syncAll, restoreFromSheet, ensureSpreadsheet, sheetUrl, MIRRORED_TABLES } from './src/sheets.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 8080;
@@ -141,6 +142,7 @@ app.get('/api/survey/state', (req, res) => {
   // Aggregate-only open tracking: flip a flag on the token, never tied to a person.
   if (row && row.cycle === win.cycle) {
     db.prepare('UPDATE tokens SET opened = 1 WHERE token_hash = ?').run(sha256(token));
+    queueSync('tokens');
   }
   res.json({
     valid: !!row && row.cycle === win.cycle,
@@ -367,6 +369,7 @@ app.post('/api/admin/tokens', requireAdmin, (req, res) => {
     raw.push(t);
   }
   // Raw tokens are returned ONCE and never stored — only their hashes are.
+  queueSync('tokens');
   res.json({ cycle, tokens: raw });
 });
 
@@ -376,6 +379,7 @@ app.post('/api/admin/window', requireAdmin, (req, res) => {
     return res.status(400).json({ error: "state must be 'open', 'closed', or null (automatic)." });
   }
   setOverride(currentCycle(), state);
+  queueSync('window_overrides');
   res.json({ ok: true, window: windowState() });
 });
 
@@ -400,6 +404,7 @@ app.post('/api/admin/summary', requireAdmin, (req, res) => {
        action = excluded.action, published = excluded.published,
        published_at = COALESCE(excluded.published_at, summaries.published_at)`
   ).run(cycle, clip(theme1), clip(theme2), clip(theme3), clip(action), publish ? 1 : 0, publish ? new Date().toISOString() : null);
+  queueSync('summaries');
   res.json({ ok: true });
 });
 
@@ -420,6 +425,7 @@ app.get('/api/admin/recipients', requireAdmin, (req, res) => {
     lastSend: db.prepare('SELECT * FROM email_log WHERE cycle = ?').get(cycle) || null,
     teamSyncedAt: db.prepare("SELECT value FROM settings WHERE key = 'team_synced_at'").get()?.value || null,
     teamSource: teamSource(),
+    sheetUrl: sheetUrl(),
   });
 });
 
@@ -448,6 +454,7 @@ app.post('/api/admin/recipients-sync', requireAdmin, async (req, res) => {
   try {
     const emails = await fetchTeamEmails();
     syncTeamFromBQ(emails);
+    queueSync('recipients');
     res.json({ ok: true, count: emails.length });
   } catch (e) {
     res.status(502).json({ error: e.message });
@@ -459,7 +466,17 @@ app.post('/api/admin/recipients-sync', requireAdmin, async (req, res) => {
 app.post('/api/admin/gmail-connect', requireAdmin, async (req, res) => {
   try {
     const { user } = await gmailExchangeCode(String(req.body?.code || ''));
-    res.json({ ok: true, user });
+    // Data mirror: make sure the "Team Pulse Data" spreadsheet exists and
+    // push everything to it right away.
+    let sheet = null;
+    try {
+      await ensureSpreadsheet();
+      await syncAll();
+      sheet = sheetUrl();
+    } catch (e) {
+      console.warn('[sheets] initial sync failed:', e.message);
+    }
+    res.json({ ok: true, user, sheetUrl: sheet });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -495,6 +512,7 @@ app.post('/api/admin/recipients', requireAdmin, (req, res) => {
     db.exec('ROLLBACK');
     throw e;
   }
+  queueSync('recipients');
   res.json({ ok: true, count: emails.length });
 });
 
@@ -503,6 +521,7 @@ app.post('/api/admin/email-test', requireAdmin, async (req, res) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email.' });
   try {
     const result = await sendInvites([email]);
+    queueSync('tokens');
     if (result.failed.length) return res.status(502).json({ error: `Send failed: ${result.failed[0].error}` });
     res.json({ ok: true, sent: result.sent });
   } catch (e) {
@@ -526,6 +545,7 @@ app.post('/api/admin/email-send', requireAdmin, async (req, res) => {
     db.prepare(
       'INSERT INTO email_log (cycle, sent_at, sent_count) VALUES (?, ?, ?) ON CONFLICT(cycle) DO UPDATE SET sent_at = excluded.sent_at, sent_count = excluded.sent_count'
     ).run(cycle, new Date().toISOString(), result.sent);
+    queueSync('tokens', 'email_log', 'recipients');
     res.json({ ok: true, ...result });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -560,6 +580,7 @@ async function autoEmailTick() {
   recordSendResults(result.results);
   db.prepare('INSERT INTO email_log (cycle, sent_at, sent_count) VALUES (?, ?, ?)')
     .run(win.cycle, new Date().toISOString(), result.sent);
+  queueSync('tokens', 'email_log', 'recipients');
   console.log(`[auto-email] ${win.cycle}: sent ${result.sent} invites${result.failed.length ? `, ${result.failed.length} failed` : ''}`);
 }
 setInterval(() => autoEmailTick().catch((e) => console.error('[auto-email]', e.message)), 10 * 60 * 1000);
@@ -596,6 +617,7 @@ function autoPublishTick() {
       'Management is reading every response and will announce this month\'s committed action.',
       now.toISOString()
     );
+    queueSync('summaries');
     console.log(`[auto-summary] published ${cycle} (${agg.count} responses)`);
   }
 }
@@ -611,6 +633,16 @@ app.get('/s/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 app.get('/p/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'peer.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 app.get('/summary', (req, res) => res.sendFile(path.join(__dirname, 'public', 'summary.html')));
+
+// Data mirror: on a cold boot with an empty local DB (ephemeral hosting),
+// restore everything from the Google Sheet before serving. A safety-net
+// re-sync every 5 minutes catches any write path that missed a hook.
+try {
+  await restoreFromSheet();
+} catch (e) {
+  console.warn('[sheets] restore skipped:', e.message);
+}
+setInterval(() => queueSync(...MIRRORED_TABLES), 5 * 60 * 1000);
 
 app.listen(PORT, () => {
   console.log(`Team Pulse listening on http://localhost:${PORT}${DEMO_MODE ? ' (DEMO MODE — fake data, window forced open)' : ''}`);

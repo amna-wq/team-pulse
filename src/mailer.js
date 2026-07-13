@@ -2,96 +2,34 @@ import nodemailer from 'nodemailer';
 import crypto from 'node:crypto';
 import { db } from './db.js';
 import { currentCycle, windowState } from './cycle.js';
+import {
+  googleAvailable, googleConnected, getSetting,
+  accessToken as googleAccessToken, exchangeCode, disconnect,
+} from './google.js';
 
 // Two ways to send, checked in this order:
-//  1. Connected Gmail (recommended — zero mail-server access needed): an admin
-//     clicks "Connect Gmail" once; we keep an OAuth refresh token (gmail.send
-//     scope only) and send through their own account via the Gmail API.
+//  1. Connected Google account (recommended — zero mail-server access needed):
+//     one "Connect Google" click grants gmail.send (+ Sheets for the data
+//     mirror); sending goes through the Gmail API as that person.
 //  2. Classic SMTP via .env, for whenever a real sending account exists.
-const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM, APP_URL,
-        GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = process.env;
-
-const getSetting = (k) => db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value;
-const setSetting = (k, v) =>
-  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(k, v);
-const delSetting = (k) => db.prepare('DELETE FROM settings WHERE key = ?').run(k);
+const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM, APP_URL } = process.env;
 
 export function smtpConfigured() {
   return !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
 }
-export function gmailAvailable() {
-  return !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
-}
 export function gmailStatus() {
   return {
-    available: gmailAvailable(),
-    connected: gmailAvailable() && !!getSetting('gmail_refresh_token'),
-    user: getSetting('gmail_user') || null,
+    available: googleAvailable(),
+    connected: googleConnected(),
+    user: getSetting('gmail_user') || process.env.GMAIL_USER || null,
   };
 }
 export function mailConfigured() {
   return smtpConfigured() || gmailStatus().connected;
 }
 
-// --- Gmail OAuth plumbing ---
-
-let gmailTok = { token: null, exp: 0 };
-
-export async function gmailExchangeCode(code) {
-  if (!gmailAvailable()) {
-    throw new Error('Add GOOGLE_CLIENT_SECRET to .env first (same Google Cloud credentials page as the client ID).');
-  }
-  const r = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      code,
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
-      redirect_uri: 'postmessage',
-      grant_type: 'authorization_code',
-    }),
-  });
-  const d = await r.json();
-  if (!r.ok) throw new Error(`Google rejected the connection: ${d.error_description || d.error}`);
-  if (!d.refresh_token) {
-    throw new Error('Google did not return a long-lived token. Remove Team Pulse at myaccount.google.com/permissions and connect again.');
-  }
-  let email = null;
-  if (d.id_token) {
-    try {
-      email = JSON.parse(Buffer.from(d.id_token.split('.')[1], 'base64url').toString()).email || null;
-    } catch { /* cosmetic only */ }
-  }
-  setSetting('gmail_refresh_token', d.refresh_token);
-  if (email) setSetting('gmail_user', email);
-  gmailTok = { token: null, exp: 0 };
-  return { user: email };
-}
-
-export function gmailDisconnect() {
-  delSetting('gmail_refresh_token');
-  delSetting('gmail_user');
-  gmailTok = { token: null, exp: 0 };
-}
-
-async function gmailAccessToken() {
-  if (gmailTok.token && Date.now() < gmailTok.exp - 60_000) return gmailTok.token;
-  const r = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
-      refresh_token: getSetting('gmail_refresh_token'),
-      grant_type: 'refresh_token',
-    }),
-  });
-  const d = await r.json();
-  if (!r.ok) throw new Error(`Gmail session expired (${d.error_description || d.error}) — reconnect Gmail on the dashboard.`);
-  gmailTok = { token: d.access_token, exp: Date.now() + d.expires_in * 1000 };
-  return gmailTok.token;
-}
+export const gmailExchangeCode = exchangeCode;
+export const gmailDisconnect = disconnect;
 
 const b64url = (s) => Buffer.from(s).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
@@ -120,7 +58,7 @@ function buildMime({ from, to, subject, text, html }) {
 }
 
 async function gmailSend(msg) {
-  const token = await gmailAccessToken();
+  const token = await googleAccessToken();
   const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
