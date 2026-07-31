@@ -69,6 +69,17 @@ function buildForm() {
   };
   fill($('blocker'), meta.blockers, 'Choose one…');
   fill($('process'), meta.processes, 'Choose one…');
+  fill($('motivation'), meta.motivations, 'Choose one…');
+  $('motivation').addEventListener('change', () => {
+    const labels = {
+      salary: 'Fair enough — what would make it about more than the paycheck?',
+      benefits: 'Nice — which benefits matter most, and what\u2019s missing?',
+      work: 'Love that — what part of the work keeps you going?',
+      no_idea: 'Honest answer — what would give you a reason?',
+    };
+    $('motivation-why-label').textContent = labels[$('motivation').value] || 'Tell us more — what\u2019s behind that answer?';
+    $('motivation-why-wrap').classList.remove('hidden');
+  });
   $('open_text_label').textContent = meta.openTextLabel;
 
   $('upward_opt_in').addEventListener('change', (e) => {
@@ -87,6 +98,8 @@ async function submit(e) {
   for (const s of meta.sliders) body[s.key] = Number($(s.key).value);
   body.blocker = $('blocker').value;
   body.process_improvement = $('process').value;
+  body.motivation = $('motivation').value;
+  body.motivation_why = $('motivation_why').value;
   body.open_text = $('open_text').value;
   body.concern = $('concern').value;
   body.concern_urgent = $('concern_urgent').checked;
@@ -94,9 +107,16 @@ async function submit(e) {
   body.upward_stop = $('up_stop').value;
   body.upward_continue = $('up_continue').value;
 
-  if (!body.blocker || !body.process_improvement) {
-    err.textContent = 'Please answer both dropdown questions.';
+  if (!body.blocker || !body.process_improvement || !body.motivation) {
+    err.textContent = 'Please answer all three dropdown questions.';
     err.classList.remove('hidden');
+    return;
+  }
+  if (!body.motivation_why.trim()) {
+    err.textContent = 'Please add a line about what motivates you — it matters.';
+    err.classList.remove('hidden');
+    $('motivation-why-wrap').classList.remove('hidden');
+    $('motivation_why').focus();
     return;
   }
 

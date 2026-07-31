@@ -29,9 +29,17 @@ export const PROCESSES = [
   { key: 'other', label: 'Other' },
 ];
 
+export const MOTIVATIONS = [
+  { key: 'salary', label: 'Salary' },
+  { key: 'benefits', label: 'Benefits' },
+  { key: 'work', label: 'The work itself' },
+  { key: 'no_idea', label: 'Honestly, no idea' },
+];
+
 export const OPEN_TEXT_LABEL =
   'Anything bothering you — company, process, workload, anything. Management reads every word.';
 
 export const sliderKeys = SLIDERS.map((s) => s.key);
+export const motivationKeys = MOTIVATIONS.map((m) => m.key);
 export const blockerKeys = BLOCKERS.map((b) => b.key);
 export const processKeys = PROCESSES.map((p) => p.key);

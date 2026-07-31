@@ -125,6 +125,16 @@ input[type="range"] {
   -webkit-appearance: none; appearance: none;
   background: transparent; cursor: pointer;
 }
+/* no focus rectangle across the slider — the thumb is the focus indicator */
+input[type="range"]:focus,
+input[type="range"]:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border: none;
+}
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.25);
+}
 input[type="range"]::-webkit-slider-runnable-track {
   height: 6px; border-radius: 4px; background: var(--track);
 }

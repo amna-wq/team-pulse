@@ -24,7 +24,7 @@
     <span class="float sparkle sparkle-b"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z"/></svg></span>
     <h1 class="hero-title">Your voice<br><span class="grad">shapes K-Brands</span></h1>
     <p class="hero-sub">Once a month, everything stops for 3 minutes and we listen.
-    Not to KPIs, to <strong>you</strong>. Anonymous, honest, and read word for word.</p>
+    Anonymous, honest, and read word for word.</p>
     <a class="hero-cta" href="#pulse">Let's do this ↓</a>
   </header>
 
@@ -86,6 +86,13 @@
 
     <label class="q" for="process">Which process needs the most improvement?</label>
     <select id="process" required></select>
+
+    <label class="q" for="motivation">What motivates you to work for this company?</label>
+    <select id="motivation" required></select>
+    <div id="motivation-why-wrap" class="hidden">
+      <label class="q" for="motivation_why" id="motivation-why-label">Tell us more — what's behind that answer?</label>
+      <textarea id="motivation_why" style="min-height:72px" placeholder="A sentence or two is perfect…"></textarea>
+    </div>
 
     <label class="q" for="open_text" id="open_text_label"></label>
     <textarea id="open_text" placeholder="Write as much or as little as you like…"></textarea>

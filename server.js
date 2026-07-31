@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db } from './src/db.js';
 import { currentCycle, windowState, windowFor, setOverride, DEMO_MODE } from './src/cycle.js';
-import { SLIDERS, BLOCKERS, PROCESSES, OPEN_TEXT_LABEL, sliderKeys, blockerKeys, processKeys } from './src/questions.js';
+import { SLIDERS, BLOCKERS, PROCESSES, MOTIVATIONS, OPEN_TEXT_LABEL, sliderKeys, blockerKeys, processKeys, motivationKeys } from './src/questions.js';
 import { draftThemes } from './src/themes.js';
 import { createPeerRouter } from './src/phase2-peer-feedback.js';
 import { sendInvites, mailConfigured, renderInviteEmail, baseUrl, gmailStatus, gmailExchangeCode, gmailDisconnect } from './src/mailer.js';
@@ -35,6 +35,8 @@ for (const sql of [
   'ALTER TABLE tokens ADD COLUMN opened INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE recipients ADD COLUMN last_sent_at TEXT',
   'ALTER TABLE recipients ADD COLUMN last_error TEXT',
+  'ALTER TABLE responses ADD COLUMN motivation TEXT',
+  'ALTER TABLE responses ADD COLUMN motivation_why TEXT',
 ]) {
   try { db.exec(sql); } catch { /* column exists */ }
 }
@@ -102,10 +104,13 @@ function cycleAggregates(cycle) {
   }
   const blockers = Object.fromEntries(blockerKeys.map((k) => [k, 0]));
   const processes = Object.fromEntries(processKeys.map((k) => [k, 0]));
+  const motivations = Object.fromEntries(motivationKeys.map((k) => [k, 0]));
   for (const r of rows) {
     if (r.blocker in blockers) blockers[r.blocker]++;
     if (r.process_improvement in processes) processes[r.process_improvement]++;
+    if (r.motivation in motivations) motivations[r.motivation]++;
   }
+  const motivationNotes = rows.map((r) => r.motivation_why).filter((t) => t && t.trim());
   const comments = rows.map((r) => r.open_text).filter((t) => t && t.trim());
   const concerns = rows
     .filter((r) => r.concern && r.concern.trim())
@@ -115,7 +120,7 @@ function cycleAggregates(cycle) {
     stop: rows.map((r) => r.upward_stop).filter((t) => t && t.trim()),
     continue: rows.map((r) => r.upward_continue).filter((t) => t && t.trim()),
   };
-  return { count, averages, blockers, processes, comments, concerns, upward };
+  return { count, averages, blockers, processes, motivations, motivationNotes, comments, concerns, upward };
 }
 
 // ---------- public API ----------
@@ -125,6 +130,7 @@ app.get('/api/meta', (req, res) => {
     sliders: SLIDERS,
     blockers: BLOCKERS,
     processes: PROCESSES,
+    motivations: MOTIVATIONS,
     openTextLabel: OPEN_TEXT_LABEL,
     demoMode: DEMO_MODE,
     peerModuleEnabled: process.env.MANAGEMENT_SPONSORED === 'true',
@@ -172,6 +178,12 @@ app.post('/api/survey/submit', (req, res) => {
   if (!processKeys.includes(b.process_improvement)) {
     return res.status(400).json({ error: 'Pick a process to improve.' });
   }
+  if (!motivationKeys.includes(b.motivation)) {
+    return res.status(400).json({ error: 'Pick what motivates you.' });
+  }
+  if (typeof b.motivation_why !== 'string' || !b.motivation_why.trim()) {
+    return res.status(400).json({ error: 'Tell us a little more about what motivates you.' });
+  }
   const clip = (t) => (typeof t === 'string' ? t.trim().slice(0, MAX_TEXT) : '');
   const openText = clip(b.open_text);
   const concern = clip(b.concern) || null;
@@ -202,14 +214,14 @@ app.post('/api/survey/submit', (req, res) => {
       `INSERT INTO responses
          (cycle, q_heard, q_equipped, q_workload, q_communication, q_meetings, q_safe,
           blocker, process_improvement, open_text, upward_start, upward_stop, upward_continue,
-          concern, concern_urgent)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          concern, concern_urgent, motivation, motivation_why)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       win.cycle,
       values.q_heard, values.q_equipped, values.q_workload,
       values.q_communication, values.q_meetings, values.q_safe,
       b.blocker, b.process_improvement, openText, upStart, upStop, upContinue,
-      concern, concernUrgent
+      concern, concernUrgent, b.motivation, clip(b.motivation_why)
     );
     db.exec('COMMIT');
   } catch (e) {
@@ -342,6 +354,8 @@ app.get('/api/admin/overview', requireAdmin, (req, res) => {
     blockers: visible ? agg.blockers : null,
     processes: visible ? agg.processes : null,
     comments: visible ? shuffle(agg.comments) : null,
+    motivations: visible ? agg.motivations : null,
+    motivationNotes: visible ? shuffle(agg.motivationNotes) : null,
     concerns: visible
       ? [...shuffle(agg.concerns.filter((c) => c.urgent)), ...shuffle(agg.concerns.filter((c) => !c.urgent))]
       : null,

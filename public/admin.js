@@ -189,6 +189,12 @@ function renderResults() {
   };
   dist(data.blockers, meta.blockers, 'blocker-bars');
   dist(data.processes, meta.processes, 'process-bars');
+  if (data.motivations) {
+    dist(data.motivations, meta.motivations, 'motivation-bars');
+    $('motivation-notes').innerHTML = (data.motivationNotes || []).length
+      ? data.motivationNotes.map((c) => `<div class="comment">${esc(c)}</div>`).join('')
+      : '<p class="hint">No explanations this month.</p>';
+  }
 
   $('comments').innerHTML = data.comments.length
     ? data.comments.map((c) => `<div class="comment">${esc(c)}</div>`).join('')

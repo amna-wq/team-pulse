@@ -58,6 +58,16 @@ const CONCERNS = [
   { text: null, urgent: 0 },
 ];
 
+const MOTIVATION_ROWS = [
+  ['work', 'I genuinely like building the brands, watching a product I touched hit page one.'],
+  ['salary', 'Pay is the main draw honestly, though the team is a bonus.'],
+  ['work', 'The autonomy. Nobody micromanages me here.'],
+  ['benefits', 'The flexible hours make family life actually possible.'],
+  ['no_idea', 'Been on autopilot lately, would love a reason to be excited again.'],
+  ['salary', 'It pays better than my last job, simple as that.'],
+  ['work', 'Learning fast, every month is something new.'],
+];
+
 const UP_START = [
   'Share a short weekly note on what leadership is focused on.',
   'Give us a heads-up before big priority changes instead of after.',
@@ -91,8 +101,8 @@ const insertResp = db.prepare(
   `INSERT INTO responses
      (cycle, q_heard, q_equipped, q_workload, q_communication, q_meetings, q_safe,
       blocker, process_improvement, open_text, upward_start, upward_stop, upward_continue,
-      concern, concern_urgent)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      concern, concern_urgent, motivation, motivation_why)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 );
 const insertToken = db.prepare('INSERT INTO tokens (token_hash, cycle) VALUES (?, ?)');
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -125,7 +135,8 @@ cycles.forEach((cycle, ci) => {
       optIn ? maybe(0.8, () => pick(UP_START)) : null,
       optIn ? maybe(0.7, () => pick(UP_STOP)) : null,
       optIn ? maybe(0.7, () => pick(UP_CONTINUE)) : null,
-      concern.text, concern.text ? concern.urgent : 0
+      concern.text, concern.text ? concern.urgent : 0,
+      ...pick(MOTIVATION_ROWS)
     );
   }
 
