@@ -282,7 +282,36 @@ app.get('/api/summary/latest', (req, res) => {
       mostImproved,
     };
   }
-  res.json({ summary: { ...row, responses: agg.count, fun } });
+  // Reassurance stats for the team page — aggregates only, as always.
+  const tok = db.prepare('SELECT COUNT(*) AS issued, COALESCE(SUM(used),0) AS used FROM tokens WHERE cycle = ?').get(row.cycle);
+  const stats = {
+    comments: agg.comments.length,
+    upward: agg.upward.start.length + agg.upward.stop.length + agg.upward.continue.length,
+    participation: tok,
+  };
+  // Honest score movement vs the previous month (both months above the floor).
+  let moves = null;
+  const prevCycleRow = db
+    .prepare('SELECT DISTINCT cycle FROM responses WHERE cycle < ? ORDER BY cycle DESC LIMIT 1')
+    .get(row.cycle)?.cycle;
+  if (prevCycleRow) {
+    const prev = cycleAggregates(prevCycleRow);
+    if (prev.count >= MIN_RESPONSES_TO_SHOW && agg.count >= MIN_RESPONSES_TO_SHOW) {
+      moves = SLIDERS.map((s) => ({
+        label: s.label,
+        avg: agg.averages[s.key],
+        delta: agg.averages[s.key] - prev.averages[s.key],
+      }));
+    }
+  }
+  // When the next pulse opens.
+  const now = new Date();
+  let nextWin = windowFor(currentCycle(now));
+  if (now >= nextWin.closes) {
+    const d = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    nextWin = windowFor(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+  res.json({ summary: { ...row, responses: agg.count, fun, stats, moves, nextOpens: nextWin.opens.toISOString() } });
 });
 
 // ---------- admin API ----------
@@ -662,6 +691,7 @@ app.use('/api/peer-feedback', createPeerRouter({ requireAdmin }));
 app.get('/s/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'survey.html')));
 app.get('/p/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'peer.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+app.get('/admin/invites', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin-invites.html')));
 app.get('/summary', (req, res) => res.sendFile(path.join(__dirname, 'public', 'summary.html')));
 
 // Data mirror: on a cold boot with an empty local DB (ephemeral hosting),
