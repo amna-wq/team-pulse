@@ -20,18 +20,23 @@
   </header>
   <div id="demo-banner" class="banner demo hidden">DEMO MODE: fake seeded data, survey window forced open.</div>
 
-  <div id="login" class="card hidden" style="max-width:440px;margin-left:auto;margin-right:auto;text-align:center">
-    <h2>Sign in</h2>
-    <p class="hint">Only <strong>khalid@k-brands.com</strong> and <strong>amna@k-brands.com</strong> can enter.</p>
-    <div id="gsi-btn" style="display:flex;justify-content:center;margin:14px 0"></div>
-    <div id="gsi-unavailable" class="hint hidden"></div>
-    <details style="margin-top:12px;text-align:left">
-      <summary class="hint" style="cursor:pointer">Password fallback</summary>
-      <label class="q" for="pw" style="margin-top:10px">Admin password</label>
-      <input type="password" id="pw" autocomplete="current-password">
-      <div class="btnrow"><button class="secondary" id="login-btn">Sign in with password</button></div>
-    </details>
-    <div id="login-err" class="banner err hidden"></div>
+  <div id="login" class="login-wrap hidden">
+    <div class="login-card">
+      <svg class="pulse-mark" viewBox="0 0 120 40" fill="none" aria-hidden="true">
+        <path class="pulse-line" d="M2 20 H34 L42 8 L52 32 L60 14 L66 20 H118"
+              stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle class="pulse-dot" cx="118" cy="20" r="3.5" fill="currentColor"/>
+      </svg>
+      <h2 class="login-title">Team Pulse</h2>
+      <p class="login-sub">Management console · Khalid &amp; Amna only</p>
+      <div id="gsi-btn" class="login-gsi"></div>
+      <div id="gsi-unavailable" class="hint hidden"></div>
+      <div class="login-divider"><span>or</span></div>
+      <input type="password" id="pw" autocomplete="current-password" placeholder="Admin password">
+      <button class="login-btn-full" id="login-btn">Sign in</button>
+      <div id="login-err" class="banner err hidden" style="margin-bottom:0"></div>
+    </div>
+    <p class="login-foot">Anonymous by design — this console only ever shows team-level data.</p>
   </div>
 
   <div id="dash" class="hidden">

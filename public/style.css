@@ -50,6 +50,61 @@ a { color: var(--accent-deep); text-decoration-thickness: 1px; text-underline-of
 a:hover { color: var(--accent); }
 .grad { color: var(--accent); }
 
+/* ---- admin login ---- */
+.login-mode .admin-head, .login-mode footer, .login-mode #demo-banner { display: none; }
+.login-wrap {
+  min-height: 82dvh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px;
+}
+.login-card {
+  width: min(380px, 92vw);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 38px 34px 30px;
+  box-shadow: 0 12px 40px rgba(17, 24, 39, 0.09), 0 2px 8px rgba(17, 24, 39, 0.05);
+  text-align: center;
+  animation: loginIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes loginIn {
+  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+.pulse-mark { width: 120px; height: 40px; color: var(--accent); margin: 0 auto 10px; display: block; }
+.pulse-line {
+  stroke-dasharray: 200;
+  stroke-dashoffset: 200;
+  animation: pulseDraw 2.6s ease-in-out infinite;
+}
+.pulse-dot { opacity: 0; animation: pulseDot 2.6s ease-in-out infinite; }
+@keyframes pulseDraw {
+  0% { stroke-dashoffset: 200; opacity: 1; }
+  55% { stroke-dashoffset: 0; opacity: 1; }
+  80% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes pulseDot {
+  0%, 50% { opacity: 0; }
+  60%, 80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.login-title { font-size: 21px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+.login-sub { font-size: 12.5px; color: var(--muted); margin: 4px 0 22px; }
+.login-gsi { display: flex; justify-content: center; min-height: 44px; }
+.login-divider {
+  display: flex; align-items: center; gap: 12px;
+  color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+  margin: 18px 0 14px;
+}
+.login-divider::before, .login-divider::after { content: ""; flex: 1; height: 1px; background: var(--grid); }
+.login-card input[type="password"] { text-align: center; margin-bottom: 10px; }
+.login-btn-full { width: 100%; padding: 11px; }
+.login-foot {
+  font-size: 12px; color: var(--muted); max-width: 340px; text-align: center; margin: 0;
+  animation: loginIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+}
+
 /* dark header band (admin) */
 .admin-head {
   background: var(--navy);

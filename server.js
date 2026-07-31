@@ -37,6 +37,8 @@ for (const sql of [
   'ALTER TABLE recipients ADD COLUMN last_error TEXT',
   'ALTER TABLE responses ADD COLUMN motivation TEXT',
   'ALTER TABLE responses ADD COLUMN motivation_why TEXT',
+  'ALTER TABLE responses ADD COLUMN blocker_other TEXT',
+  'ALTER TABLE responses ADD COLUMN process_other TEXT',
 ]) {
   try { db.exec(sql); } catch { /* column exists */ }
 }
@@ -110,7 +112,11 @@ function cycleAggregates(cycle) {
     if (r.process_improvement in processes) processes[r.process_improvement]++;
     if (r.motivation in motivations) motivations[r.motivation]++;
   }
-  const motivationNotes = rows.map((r) => r.motivation_why).filter((t) => t && t.trim());
+  const blockerOthers = rows.map((r) => r.blocker_other).filter((t) => t && t.trim());
+  const processOthers = rows.map((r) => r.process_other).filter((t) => t && t.trim());
+  const motivationNotes = rows
+    .filter((r) => r.motivation_why && r.motivation_why.trim())
+    .map((r) => ({ m: r.motivation, text: r.motivation_why }));
   const comments = rows.map((r) => r.open_text).filter((t) => t && t.trim());
   const concerns = rows
     .filter((r) => r.concern && r.concern.trim())
@@ -120,7 +126,7 @@ function cycleAggregates(cycle) {
     stop: rows.map((r) => r.upward_stop).filter((t) => t && t.trim()),
     continue: rows.map((r) => r.upward_continue).filter((t) => t && t.trim()),
   };
-  return { count, averages, blockers, processes, motivations, motivationNotes, comments, concerns, upward };
+  return { count, averages, blockers, processes, motivations, motivationNotes, blockerOthers, processOthers, comments, concerns, upward };
 }
 
 // ---------- public API ----------
@@ -178,6 +184,12 @@ app.post('/api/survey/submit', (req, res) => {
   if (!processKeys.includes(b.process_improvement)) {
     return res.status(400).json({ error: 'Pick a process to improve.' });
   }
+  if (b.blocker === 'other' && (typeof b.blocker_other !== 'string' || !b.blocker_other.trim())) {
+    return res.status(400).json({ error: 'You picked Other as your blocker — tell us what it was.' });
+  }
+  if (b.process_improvement === 'other' && (typeof b.process_other !== 'string' || !b.process_other.trim())) {
+    return res.status(400).json({ error: 'You picked Other as the process — tell us which one.' });
+  }
   if (!motivationKeys.includes(b.motivation)) {
     return res.status(400).json({ error: 'Pick what motivates you.' });
   }
@@ -214,14 +226,16 @@ app.post('/api/survey/submit', (req, res) => {
       `INSERT INTO responses
          (cycle, q_heard, q_equipped, q_workload, q_communication, q_meetings, q_safe,
           blocker, process_improvement, open_text, upward_start, upward_stop, upward_continue,
-          concern, concern_urgent, motivation, motivation_why)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          concern, concern_urgent, motivation, motivation_why, blocker_other, process_other)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       win.cycle,
       values.q_heard, values.q_equipped, values.q_workload,
       values.q_communication, values.q_meetings, values.q_safe,
       b.blocker, b.process_improvement, openText, upStart, upStop, upContinue,
-      concern, concernUrgent, b.motivation, clip(b.motivation_why)
+      concern, concernUrgent, b.motivation, clip(b.motivation_why),
+      b.blocker === 'other' ? clip(b.blocker_other) : null,
+      b.process_improvement === 'other' ? clip(b.process_other) : null
     );
     db.exec('COMMIT');
   } catch (e) {
@@ -356,6 +370,8 @@ app.get('/api/admin/overview', requireAdmin, (req, res) => {
     comments: visible ? shuffle(agg.comments) : null,
     motivations: visible ? agg.motivations : null,
     motivationNotes: visible ? shuffle(agg.motivationNotes) : null,
+    blockerOthers: visible ? shuffle(agg.blockerOthers) : null,
+    processOthers: visible ? shuffle(agg.processOthers) : null,
     concerns: visible
       ? [...shuffle(agg.concerns.filter((c) => c.urgent)), ...shuffle(agg.concerns.filter((c) => !c.urgent))]
       : null,

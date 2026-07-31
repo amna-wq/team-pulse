@@ -70,6 +70,10 @@ function buildForm() {
   fill($('blocker'), meta.blockers, 'Choose one…');
   fill($('process'), meta.processes, 'Choose one…');
   fill($('motivation'), meta.motivations, 'Choose one…');
+  $('blocker').addEventListener('change', () =>
+    $('blocker-other-wrap').classList.toggle('hidden', $('blocker').value !== 'other'));
+  $('process').addEventListener('change', () =>
+    $('process-other-wrap').classList.toggle('hidden', $('process').value !== 'other'));
   $('motivation').addEventListener('change', () => {
     const labels = {
       salary: 'Fair enough — what would make it about more than the paycheck?',
@@ -100,6 +104,8 @@ async function submit(e) {
   body.process_improvement = $('process').value;
   body.motivation = $('motivation').value;
   body.motivation_why = $('motivation_why').value;
+  body.blocker_other = $('blocker_other').value;
+  body.process_other = $('process_other').value;
   body.open_text = $('open_text').value;
   body.concern = $('concern').value;
   body.concern_urgent = $('concern_urgent').checked;
@@ -110,6 +116,18 @@ async function submit(e) {
   if (!body.blocker || !body.process_improvement || !body.motivation) {
     err.textContent = 'Please answer all three dropdown questions.';
     err.classList.remove('hidden');
+    return;
+  }
+  if (body.blocker === 'other' && !body.blocker_other.trim()) {
+    err.textContent = 'You picked Other as your blocker — a few words about it, please.';
+    err.classList.remove('hidden');
+    $('blocker_other').focus();
+    return;
+  }
+  if (body.process_improvement === 'other' && !body.process_other.trim()) {
+    err.textContent = 'You picked Other as the process — name it, please.';
+    err.classList.remove('hidden');
+    $('process_other').focus();
     return;
   }
   if (!body.motivation_why.trim()) {

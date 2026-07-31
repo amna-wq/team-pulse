@@ -21,6 +21,7 @@ async function init() {
   if (meta.demoMode) $('demo-banner').classList.remove('hidden');
   const { admin } = await api('/api/admin/session');
   if (admin) return showDash();
+  document.body.classList.add('login-mode');
   $('login').classList.remove('hidden');
   $('login-btn').addEventListener('click', passwordLogin);
   $('pw').addEventListener('keydown', (e) => e.key === 'Enter' && passwordLogin());
@@ -77,6 +78,7 @@ async function passwordLogin() {
 // ---- dashboard ----
 
 async function showDash(cycle) {
+  document.body.classList.remove('login-mode');
   data = await api('/api/admin/overview' + (cycle ? `?cycle=${cycle}` : ''));
   $('dash').classList.remove('hidden');
   renderHeader();
@@ -189,10 +191,28 @@ function renderResults() {
   };
   dist(data.blockers, meta.blockers, 'blocker-bars');
   dist(data.processes, meta.processes, 'process-bars');
+  const others = (list) => (list || []).map((c) => `<div class="comment">${esc(c)}</div>`).join('');
+  if ((data.blockerOthers || []).length) {
+    $('blocker-bars').insertAdjacentHTML('beforeend',
+      `<h2 style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:12px 0 4px">"Other" write-ins</h2>${others(data.blockerOthers)}`);
+  }
+  if ((data.processOthers || []).length) {
+    $('process-bars').insertAdjacentHTML('beforeend',
+      `<h2 style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:12px 0 4px">"Other" write-ins</h2>${others(data.processOthers)}`);
+  }
   if (data.motivations) {
     dist(data.motivations, meta.motivations, 'motivation-bars');
-    $('motivation-notes').innerHTML = (data.motivationNotes || []).length
-      ? data.motivationNotes.map((c) => `<div class="comment">${esc(c)}</div>`).join('')
+    const notes = data.motivationNotes || [];
+    const groups = meta.motivations
+      .map((m) => ({
+        label: m.label,
+        items: notes.filter((n) => n.m === m.key).map((n) => n.text),
+      }))
+      .filter((g) => g.items.length);
+    $('motivation-notes').innerHTML = groups.length
+      ? groups.map((g) => `
+          <h2 style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 4px">${esc(g.label)} · ${g.items.length}</h2>
+          ${g.items.map((c) => `<div class="comment">${esc(c)}</div>`).join('')}`).join('')
       : '<p class="hint">No explanations this month.</p>';
   }
 
