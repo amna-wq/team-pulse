@@ -23,8 +23,6 @@ async function init() {
   if (admin) return showDash();
   document.body.classList.add('login-mode');
   $('login').classList.remove('hidden');
-  $('login-btn').addEventListener('click', passwordLogin);
-  $('pw').addEventListener('keydown', (e) => e.key === 'Enter' && passwordLogin());
   initGoogleButton();
 }
 
@@ -32,13 +30,13 @@ async function init() {
 
 function initGoogleButton(attempt = 0) {
   if (!meta.googleClientId) {
-    $('gsi-unavailable').textContent = 'Google sign-in is not configured yet (GOOGLE_CLIENT_ID missing in .env). Use the password fallback below.';
+    $('gsi-unavailable').textContent = 'Google sign-in is not configured yet (GOOGLE_CLIENT_ID missing in .env). Ask Amna to check the setup.';
     $('gsi-unavailable').classList.remove('hidden');
     return;
   }
   if (!window.google?.accounts?.id) {
     if (attempt < 20) return void setTimeout(() => initGoogleButton(attempt + 1), 250);
-    $('gsi-unavailable').textContent = 'Google sign-in script did not load. Check your connection or use the password fallback.';
+    $('gsi-unavailable').textContent = 'Google sign-in script did not load. Check your connection and refresh.';
     $('gsi-unavailable').classList.remove('hidden');
     return;
   }
@@ -59,20 +57,6 @@ function initGoogleButton(attempt = 0) {
     },
   });
   google.accounts.id.renderButton($('gsi-btn'), { theme: 'filled_blue', size: 'large', shape: 'pill', text: 'signin_with', width: 280 });
-}
-
-async function passwordLogin() {
-  try {
-    await api('/api/admin/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: $('pw').value }),
-    });
-    $('login').classList.add('hidden');
-    showDash();
-  } catch (e) {
-    $('login-err').textContent = e.message;
-    $('login-err').classList.remove('hidden');
-  }
 }
 
 // ---- dashboard ----
