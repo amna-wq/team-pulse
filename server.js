@@ -553,6 +553,7 @@ app.use('/api/peer-feedback', createPeerRouter({ requireAdmin }));
 
 app.get('/s/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'survey.html')));
 app.get('/p/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'peer.html')));
+app.get('/thanks', (req, res) => res.sendFile(path.join(__dirname, 'public', 'thanks.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 app.get('/admin/invites', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin-invites.html')));
 

@@ -145,16 +145,37 @@ async function submit(e) {
     body: JSON.stringify(body),
   });
   if (res.ok) {
-    $('survey').classList.add('hidden');
-    $('done').classList.remove('hidden');
-    window.scrollTo(0, 0);
-    if (typeof confettiBurst === 'function') confettiBurst();
+    playSendOff();
   } else {
     const data = await res.json().catch(() => ({}));
     err.textContent = data.error || 'Something went wrong. Please try again.';
     err.classList.remove('hidden');
     $('submit-btn').disabled = false;
   }
+}
+
+// A short "sealed and sent, anonymously" moment, then the thank-you page.
+// Deliberately minimal: one ring, one checkmark, two lines of text.
+function playSendOff() {
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduced) return void (window.location.href = '/thanks');
+
+  const o = document.createElement('div');
+  o.className = 'sendoff';
+  o.innerHTML = `
+    <div class="sendoff-inner">
+      <svg class="sendoff-mark" viewBox="0 0 52 52" aria-hidden="true">
+        <circle class="so-ring" cx="26" cy="26" r="23" fill="none" stroke-width="2.5"/>
+        <path class="so-tick" d="M15 26.5 L22.5 34 L37 19" fill="none" stroke-width="3.2"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="sendoff-title">Sealed anonymously</div>
+      <div class="sendoff-sub">Your answers are in — with nothing attached to your name.</div>
+    </div>`;
+  document.body.appendChild(o);
+  requestAnimationFrame(() => o.classList.add('on'));
+  setTimeout(() => o.classList.add('leaving'), 1850);
+  setTimeout(() => { window.location.href = '/thanks'; }, 2250);
 }
 
 init();

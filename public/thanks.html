@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Thank you · Team Pulse</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="ty-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20 6 9 17l-5-5"/>
+      </svg>
+    </div>
+    <h1 class="hero-title">Your voice<br><span class="grad">matters here.</span></h1>
+    <p class="hero-sub">That's it — you're done. What you just wrote goes straight to Khalid and Amna,
+    with nothing attached to your name. No scores, no rankings, no way to trace it back to you. Ever.</p>
+  </header>
+
+  <div class="ty-quote reveal">
+    <p class="big">You just did the hardest thing in any company:
+    <span class="grad">you said what you actually think.</span></p>
+    <p class="who">That's how things change around here.</p>
+  </div>
+
+  <span class="section-eyebrow reveal">What happens now</span>
+  <div class="ty-steps">
+    <div class="ty-step reveal">
+      <div class="n">1</div>
+      <h3>Every word gets read</h3>
+      <p>Not skimmed, not counted — read. Your comment, your concern, your reason for showing up.</p>
+    </div>
+    <div class="ty-step reveal" style="--d:.08s">
+      <div class="n">2</div>
+      <h3>Patterns turn into decisions</h3>
+      <p>When several of you name the same blocker, it stops being an opinion and becomes a priority.</p>
+    </div>
+    <div class="ty-step reveal" style="--d:.16s">
+      <div class="n">3</div>
+      <h3>You'll see it next month</h3>
+      <p>The next pulse asks the same questions — that's how we all find out whether it actually worked.</p>
+    </div>
+  </div>
+
+  <div class="ty-band reveal">
+    <h2>Be your best.</h2>
+    <p>Khalid's words, and the whole reason this exists. We can't ask you to be your best
+    in a place where you can't say what's wrong. Thank you for trusting it — see you next month.</p>
+  </div>
+
+  <footer>Team Pulse · anonymous by design · you can close this tab</footer>
+</main>
+<script src="/reveal.js"></script>
+<script>
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const els = document.querySelectorAll('.reveal');
+  if (reduced) {
+    els.forEach((el) => el.classList.add('in-view'));
+  } else {
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in-view'); io.unobserve(e.target); }
+    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+    els.forEach((el) => io.observe(el));
+  }
+</script>
+</body>
+</html>
