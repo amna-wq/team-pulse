@@ -5,7 +5,6 @@ import { fileURLToPath } from 'node:url';
 import { db } from './src/db.js';
 import { currentCycle, windowState, windowFor, setOverride, DEMO_MODE } from './src/cycle.js';
 import { SLIDERS, BLOCKERS, PROCESSES, MOTIVATIONS, OPEN_TEXT_LABEL, sliderKeys, blockerKeys, processKeys, motivationKeys } from './src/questions.js';
-import { draftThemes } from './src/themes.js';
 import { createPeerRouter } from './src/phase2-peer-feedback.js';
 import { sendInvites, mailConfigured, renderInviteEmail, baseUrl, gmailStatus, gmailExchangeCode, gmailDisconnect } from './src/mailer.js';
 import { fetchTeamEmails, teamSource } from './src/team.js';
@@ -245,75 +244,6 @@ app.post('/api/survey/submit', (req, res) => {
   res.json({ ok: true });
 });
 
-// The published team summary — themes, action, and playful AGGREGATE fun
-// facts (about problems and team-level scores, never people). Individual
-// responses and concerns never appear here.
-app.get('/api/summary/latest', (req, res) => {
-  const row = db
-    .prepare('SELECT cycle, theme1, theme2, theme3, action, published_at FROM summaries WHERE published = 1 ORDER BY cycle DESC LIMIT 1')
-    .get();
-  if (!row) return res.json({ summary: null });
-  const agg = cycleAggregates(row.cycle);
-  let fun = null;
-  if (agg.count >= MIN_RESPONSES_TO_SHOW) {
-    const topBlocker = Object.entries(agg.blockers).sort((a, b) => b[1] - a[1])[0];
-    const strongest = SLIDERS.map((s) => ({ label: s.label, avg: agg.averages[s.key] }))
-      .sort((a, b) => b.avg - a.avg)[0];
-    // Most-improved slider vs the previous cycle (if it has enough responses).
-    const prevCycle = db
-      .prepare('SELECT DISTINCT cycle FROM responses WHERE cycle < ? ORDER BY cycle DESC LIMIT 1')
-      .get(row.cycle)?.cycle;
-    let mostImproved = null;
-    if (prevCycle) {
-      const prev = cycleAggregates(prevCycle);
-      if (prev.count >= MIN_RESPONSES_TO_SHOW) {
-        const best = SLIDERS.map((s) => ({
-          label: s.label,
-          delta: agg.averages[s.key] - prev.averages[s.key],
-        })).sort((a, b) => b.delta - a.delta)[0];
-        if (best.delta >= 0.1) mostImproved = { label: best.label, delta: best.delta };
-      }
-    }
-    fun = {
-      topBlocker: topBlocker && topBlocker[1] > 0
-        ? { label: BLOCKERS.find((b) => b.key === topBlocker[0])?.label || topBlocker[0], count: topBlocker[1] }
-        : null,
-      strongest: { label: strongest.label, avg: strongest.avg },
-      mostImproved,
-    };
-  }
-  // Reassurance stats for the team page — aggregates only, as always.
-  const tok = db.prepare('SELECT COUNT(*) AS issued, COALESCE(SUM(used),0) AS used FROM tokens WHERE cycle = ?').get(row.cycle);
-  const stats = {
-    comments: agg.comments.length,
-    upward: agg.upward.start.length + agg.upward.stop.length + agg.upward.continue.length,
-    participation: tok,
-  };
-  // Honest score movement vs the previous month (both months above the floor).
-  let moves = null;
-  const prevCycleRow = db
-    .prepare('SELECT DISTINCT cycle FROM responses WHERE cycle < ? ORDER BY cycle DESC LIMIT 1')
-    .get(row.cycle)?.cycle;
-  if (prevCycleRow) {
-    const prev = cycleAggregates(prevCycleRow);
-    if (prev.count >= MIN_RESPONSES_TO_SHOW && agg.count >= MIN_RESPONSES_TO_SHOW) {
-      moves = SLIDERS.map((s) => ({
-        label: s.label,
-        avg: agg.averages[s.key],
-        delta: agg.averages[s.key] - prev.averages[s.key],
-      }));
-    }
-  }
-  // When the next pulse opens.
-  const now = new Date();
-  let nextWin = windowFor(currentCycle(now));
-  if (now >= nextWin.closes) {
-    const d = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    nextWin = windowFor(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-  }
-  res.json({ summary: { ...row, responses: agg.count, fun, stats, moves, nextOpens: nextWin.opens.toISOString() } });
-});
-
 // ---------- admin API ----------
 
 app.post('/api/admin/login', (req, res) => {
@@ -383,9 +313,6 @@ app.get('/api/admin/overview', requireAdmin, (req, res) => {
     }
   }
 
-  const summary =
-    db.prepare('SELECT * FROM summaries WHERE cycle = ?').get(cycle) || null;
-
   res.json({
     cycle,
     window: win,
@@ -409,7 +336,6 @@ app.get('/api/admin/overview', requireAdmin, (req, res) => {
       : null,
     trends,
     cycles,
-    summary,
     demoMode: DEMO_MODE,
   });
 });
@@ -440,31 +366,6 @@ app.post('/api/admin/window', requireAdmin, (req, res) => {
   setOverride(currentCycle(), state);
   queueSync('window_overrides');
   res.json({ ok: true, window: windowState() });
-});
-
-app.get('/api/admin/summary/draft', requireAdmin, (req, res) => {
-  const cycle = String(req.query.cycle || currentCycle());
-  const agg = cycleAggregates(cycle);
-  if (agg.count < MIN_RESPONSES_TO_SHOW) {
-    return res.status(400).json({ error: `Need at least ${MIN_RESPONSES_TO_SHOW} responses to draft themes.` });
-  }
-  res.json({ themes: draftThemes(agg) });
-});
-
-app.post('/api/admin/summary', requireAdmin, (req, res) => {
-  const { cycle, theme1 = '', theme2 = '', theme3 = '', action = '', publish = false } = req.body || {};
-  if (!/^\d{4}-\d{2}$/.test(String(cycle))) return res.status(400).json({ error: 'Bad cycle.' });
-  const clip = (t) => String(t || '').trim().slice(0, MAX_TEXT);
-  db.prepare(
-    `INSERT INTO summaries (cycle, theme1, theme2, theme3, action, published, published_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(cycle) DO UPDATE SET
-       theme1 = excluded.theme1, theme2 = excluded.theme2, theme3 = excluded.theme3,
-       action = excluded.action, published = excluded.published,
-       published_at = COALESCE(excluded.published_at, summaries.published_at)`
-  ).run(cycle, clip(theme1), clip(theme2), clip(theme3), clip(action), publish ? 1 : 0, publish ? new Date().toISOString() : null);
-  queueSync('summaries');
-  res.json({ ok: true });
 });
 
 // ---------- email invites ----------
@@ -645,44 +546,6 @@ async function autoEmailTick() {
 setInterval(() => autoEmailTick().catch((e) => console.error('[auto-email]', e.message)), 10 * 60 * 1000);
 setTimeout(() => autoEmailTick().catch((e) => console.error('[auto-email]', e.message)), 5000);
 
-// Auto-summary: when a cycle's window has closed and enough responses exist,
-// the monthly team summary generates and publishes itself. Zero clicks.
-function prevCycleOf(cycle) {
-  const [y, m] = cycle.split('-').map(Number);
-  const d = new Date(y, m - 2, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-function autoPublishTick() {
-  if (DEMO_MODE) return; // demo window never closes
-  const now = new Date();
-  const current = currentCycle(now);
-  for (const cycle of [current, prevCycleOf(current)]) {
-    const { closes } = windowFor(cycle);
-    if (now < closes) continue;
-    const existing = db.prepare('SELECT published FROM summaries WHERE cycle = ?').get(cycle);
-    if (existing?.published) continue;
-    const agg = cycleAggregates(cycle);
-    if (agg.count < MIN_RESPONSES_TO_SHOW) continue;
-    const themes = draftThemes(agg);
-    db.prepare(
-      `INSERT INTO summaries (cycle, theme1, theme2, theme3, action, published, published_at)
-       VALUES (?, ?, ?, ?, ?, 1, ?)
-       ON CONFLICT(cycle) DO UPDATE SET
-         theme1 = excluded.theme1, theme2 = excluded.theme2, theme3 = excluded.theme3,
-         action = excluded.action, published = 1,
-         published_at = COALESCE(summaries.published_at, excluded.published_at)`
-    ).run(
-      cycle, themes[0] || '', themes[1] || '', themes[2] || '',
-      'Management is reading every response and will announce this month\'s committed action.',
-      now.toISOString()
-    );
-    queueSync('summaries');
-    console.log(`[auto-summary] published ${cycle} (${agg.count} responses)`);
-  }
-}
-setInterval(() => { try { autoPublishTick(); } catch (e) { console.error('[auto-summary]', e.message); } }, 10 * 60 * 1000);
-setTimeout(() => { try { autoPublishTick(); } catch (e) { console.error('[auto-summary]', e.message); } }, 8000);
-
 // Phase 2 — peer feedback module, gated behind MANAGEMENT_SPONSORED.
 app.use('/api/peer-feedback', createPeerRouter({ requireAdmin }));
 
@@ -692,7 +555,6 @@ app.get('/s/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 app.get('/p/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'peer.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 app.get('/admin/invites', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin-invites.html')));
-app.get('/summary', (req, res) => res.sendFile(path.join(__dirname, 'public', 'summary.html')));
 
 // Data mirror: on a cold boot with an empty local DB (ephemeral hosting),
 // restore everything from the Google Sheet before serving. A safety-net

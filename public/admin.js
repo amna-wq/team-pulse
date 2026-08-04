@@ -69,7 +69,6 @@ async function showDash(cycle) {
   renderHeader();
   renderTiles();
   renderResults();
-  renderSummaryView();
   wireOnce();
 }
 
@@ -262,21 +261,6 @@ function attachSparkTips() {
     });
     c.addEventListener('mouseleave', () => tipEl.classList.add('hidden'));
   }
-}
-
-// ---- auto-published summary (read-only) ----
-
-function renderSummaryView() {
-  const s = data.summary;
-  if (!s || !s.published) {
-    $('summary-view').innerHTML = `<p class="hint">Nothing published for ${monthName(data.cycle)} yet. It happens automatically when the window closes (needs at least ${data.minResponsesToShow} responses).</p>`;
-    return;
-  }
-  const themes = [s.theme1, s.theme2, s.theme3].filter((t) => t && t.trim());
-  $('summary-view').innerHTML =
-    `<div class="banner info">Published ${new Date(s.published_at).toLocaleString()}</div>` +
-    themes.map((t, i) => `<div class="comment"><strong>Theme ${i + 1}.</strong> ${esc(t)}</div>`).join('') +
-    (s.action ? `<div class="comment"><strong>Action.</strong> ${esc(s.action)}</div>` : '');
 }
 
 function esc(s) {

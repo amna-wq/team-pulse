@@ -148,20 +148,6 @@ cycles.forEach((cycle, ci) => {
   }
 });
 
-// A published summary for the most recent COMPLETE month, so /summary has content.
-const prevCycle = cycles[cycles.length - 2];
-db.prepare(
-  `INSERT INTO summaries (cycle, theme1, theme2, theme3, action, published, published_at)
-   VALUES (?, ?, ?, ?, ?, 1, ?)`
-).run(
-  prevCycle,
-  'Meetings are the weakest area again (avg ~5.8/10) — too many without agendas, and several people say mornings are lost to status updates.',
-  'Priorities changing mid-month is the most-cited blocker; planning & prioritization is the process most people want improved.',
-  'Positive signal: "I have what I need to do my job well" keeps trending up since the tooling fixes.',
-  'This month we will introduce a no-meeting Wednesday morning and require an agenda on every recurring invite; we will review whether it helped in next month\'s pulse.',
-  new Date().toISOString()
-);
-
 // Peer feedback (Phase 2) demo roster + a little sample feedback, so the
 // module is demoable if MANAGEMENT_SPONSORED=true is set. Fake names only.
 const PEOPLE = ['Alex', 'Bilal', 'Chris', 'Dana', 'Farah', 'Omar'];
@@ -176,5 +162,5 @@ insFb.run(cur, 1, null, 'Please stop rescheduling our 1:1 last minute.', null);
 insFb.run(cur, 2, 'Start speaking up in planning — your instincts are usually right.', null, 'Keep helping the new folks, it does not go unnoticed.');
 
 const total = db.prepare('SELECT COUNT(*) AS n FROM responses').get().n;
-console.log(`Seeded ${cycles.length} cycles, ${total} fake responses, 1 published summary (${prevCycle}).`);
+console.log(`Seeded ${cycles.length} cycles, ${total} fake responses.`);
 console.log('Start the demo with: DEMO_MODE=true ADMIN_PASSWORD=demo-admin node server.js');

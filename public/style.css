@@ -357,7 +357,6 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
 .dash-mode .grid2 .card:first-child { border-top-color: var(--amber); }
 .dash-mode .grid2 .card:last-child { border-top-color: var(--good); }
 .dash-mode #upward-card { border-top-color: var(--amber); }
-.dash-mode #summary-card { border-top-color: var(--good); }
 .dash-mode .monthbar { border-top-color: var(--navy-2); }
 .dash-mode #results .card h2::before {
   content: ""; display: inline-block; vertical-align: 1px;

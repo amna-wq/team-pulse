@@ -10,8 +10,6 @@ ranking people, and it is built so it *can't* become one.
   management (start/stop/continue).
 - **Admin dashboard** — password-gated, shows **aggregates only**: averages,
   month-over-month trends, dropdown distributions, and anonymous comments.
-- **Team summary** — top 3 themes + one action management commits to. This is
-  the only output shared with the whole team.
 
 ## Quick start (demo for your manager)
 
@@ -26,7 +24,6 @@ Then open:
   `ADMIN_PASSWORD` you set in `.env` — copy `.env.example` to `.env` to configure;
   `.env` is loaded automatically by `npm start` and `npm run demo`)
 - **Survey:** the seed prints a few unused demo links (`/s/<token>`) — submit one live
-- **Team summary:** http://localhost:8080/summary
 
 Demo mode forces the survey window open and shows a "fake data" banner
 everywhere. `npm run seed` reseeds at any time.
@@ -94,12 +91,9 @@ Enforced in code, not just policy:
    and DMs/emails each person one link.
 3. **During the 48 hours:** each link accepts exactly one submission. No
    editing, no viewing after submit.
-4. **After the window:** admin reviews aggregates, clicks **"Generate draft
-   themes from data"** (auto-drafts top 3 themes from the lowest slider, the
-   top blocker/process, and recurring comment keywords), edits them, records
-   **one action** management commits to, and hits **Publish**.
-5. **Everyone** sees the published themes + action at `/summary`. Never
-   individual responses.
+4. **After the window:** admin reviews the aggregates on the dashboard and
+   decides what management acts on. Individual responses are never visible
+   to anyone.
 
 ## Deployment (Cloud Run)
 
@@ -169,8 +163,8 @@ work hard for you?* It exists so a junior person, or anyone who feels like the
 odd one out, can say "this person's behavior is hurting me" without saying it
 out loud. Rules, enforced in code:
 
-- Delivered **only to the admin dashboard** (management). It never appears on
-  the team summary and there is no API that exposes it publicly.
+- Delivered **only to the admin dashboard** (management). There is no API
+  that exposes it publicly.
 - Same anonymity as everything else: no author, no timestamp, shuffled order,
   hidden below the anonymity floor.
 - An **"urgent" flag** pins a concern to the top of the management view.
@@ -201,8 +195,8 @@ Deliberate constraints, enforced by schema and API — not just policy:
   no timestamp on feedback rows.
 - **Per-person delivery only.** The only read API returns feedback *about one
   person* for the manager to pass on privately. There is no cross-person
-  comparison view, and nothing from this module ever reaches the team summary
-  or the Pulse dashboard.
+  comparison view, and nothing from this module ever reaches the Pulse
+  dashboard.
 
 Why no anonymous person-ratings, ever: on a 15–20 person team, "rate your
 colleagues" becomes a popularity contest that punishes exactly the people the
