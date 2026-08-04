@@ -63,6 +63,7 @@ function initGoogleButton(attempt = 0) {
 
 async function showDash(cycle) {
   document.body.classList.remove('login-mode');
+  document.body.classList.add('dash-mode');
   data = await api('/api/admin/overview' + (cycle ? `?cycle=${cycle}` : ''));
   $('dash').classList.remove('hidden');
   renderHeader();

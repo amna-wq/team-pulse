@@ -15,8 +15,14 @@
 <body>
 <main class="wide">
   <header class="admin-head">
-    <h1 class="admin-title">Team <span class="grad">Pulse</span></h1>
-    <p class="sub">The team's honest read on how work feels, for Khalid and Amna to act on. Team-level only, never per person.</p>
+    <div>
+      <h1 class="admin-title">Team <span class="grad">Pulse</span></h1>
+      <p class="sub">The team's honest read on how work feels, for Khalid and Amna to act on. Team-level only, never per person.</p>
+    </div>
+    <a href="/admin/invites" class="btn-invites" id="invites-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
+      Invites
+    </a>
   </header>
   <div id="demo-banner" class="banner demo hidden">DEMO MODE: fake seeded data, survey window forced open.</div>
 
@@ -35,15 +41,14 @@
 
     <div class="card monthbar">
       <div class="monthpick">
-        <label class="q" for="cycle-select" style="margin:0">Viewing</label>
+        <label class="q" for="cycle-select" style="margin:0">Month</label>
         <select id="cycle-select"></select>
       </div>
       <div style="flex:1"></div>
-      <div style="text-align:right">
+      <div class="window-status">
+        <span class="hint" id="window-detail" style="margin:0"></span>
         <span id="window-pill" class="pill"></span>
-        <div class="hint" id="window-detail" style="margin-top:6px"></div>
       </div>
-      <a href="/admin/invites" class="btn-link" style="font-weight:600">Invites ↗</a>
     </div>
 
     <div class="tiles" id="tiles"></div>
@@ -106,7 +111,6 @@
 
 
   </div>
-  <footer>Team Pulse admin · no per-person data exists anywhere in this app</footer>
 </main>
 <script src="/admin.js"></script>
 </body>

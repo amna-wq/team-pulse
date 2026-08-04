@@ -139,14 +139,49 @@ a:hover { color: var(--accent); }
 
 /* dark header band (admin) */
 .admin-head {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
   background: var(--navy);
   border-radius: 10px;
   border-bottom: 3px solid var(--red);
   padding: 18px 22px 16px;
   margin-bottom: 16px;
 }
+/* a slow drifting glow inside the navy band — alive, still corporate */
+.admin-head::before {
+  content: ""; position: absolute; pointer-events: none;
+  width: 480px; height: 480px; top: -320px; right: -80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.35), transparent 65%);
+  animation: headGlow 12s ease-in-out infinite alternate;
+}
+@keyframes headGlow {
+  from { transform: translateX(0) scale(1); opacity: 0.7; }
+  to   { transform: translateX(-260px) scale(1.25); opacity: 1; }
+}
+.admin-head > * { position: relative; }
 .admin-head .admin-title, .admin-head h1 { color: #fff; margin: 0; font-size: 22px; }
 .admin-head .sub { color: #9ca3af; font-size: 13px; margin: 4px 0 0; }
+
+.btn-invites {
+  flex: none;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13.5px; font-weight: 600; color: #fff; text-decoration: none;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px; padding: 9px 16px;
+  backdrop-filter: blur(4px);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-invites:hover {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.45);
+}
+.btn-invites svg { flex: none; }
+@media (max-width: 640px) { .admin-head { flex-direction: column; align-items: flex-start; } }
 
 /* ---- motion: subtle, professional ---- */
 @keyframes rise {
@@ -300,6 +335,57 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
 .monthbar { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
 .monthpick { display: flex; gap: 10px; align-items: center; }
 .monthpick select { width: auto; min-width: 140px; }
+.window-status { display: flex; align-items: center; gap: 12px; }
+
+/* dashboard vibrancy — soft tinted backdrop + status-colored cards + lively hovers */
+.dash-mode {
+  background:
+    radial-gradient(900px 420px at 12% -60px, rgba(59, 130, 246, 0.09), transparent 70%),
+    radial-gradient(800px 420px at 88% 30%, rgba(99, 102, 241, 0.07), transparent 70%),
+    var(--page);
+  background-attachment: fixed;
+}
+.dash-mode .card {
+  border-top: 3px solid var(--accent);
+  transition: transform 0.2s var(--spring), box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.dash-mode .card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(30, 58, 138, 0.10);
+}
+.dash-mode #results > .card:nth-of-type(2) { border-top-color: var(--navy-2); }
+.dash-mode .grid2 .card:first-child { border-top-color: var(--amber); }
+.dash-mode .grid2 .card:last-child { border-top-color: var(--good); }
+.dash-mode #upward-card { border-top-color: var(--amber); }
+.dash-mode #summary-card { border-top-color: var(--good); }
+.dash-mode .monthbar { border-top-color: var(--navy-2); }
+.dash-mode #results .card h2::before {
+  content: ""; display: inline-block; vertical-align: 1px;
+  width: 8px; height: 8px; border-radius: 3px; margin-right: 9px;
+  background: linear-gradient(140deg, var(--accent-soft), var(--accent-deep));
+}
+/* staggered entrance for the result cards */
+.dash-mode #results > *:nth-child(1) { animation-delay: 0.05s; }
+.dash-mode #results > *:nth-child(2) { animation-delay: 0.1s; }
+.dash-mode #results > *:nth-child(3) { animation-delay: 0.15s; }
+.dash-mode #results > *:nth-child(4) { animation-delay: 0.2s; }
+.dash-mode #results > *:nth-child(5) { animation-delay: 0.25s; }
+.dash-mode #results > *:nth-child(6) { animation-delay: 0.3s; }
+.dash-mode .tile { transition: transform 0.2s var(--spring), box-shadow 0.2s ease; }
+.dash-mode .tile:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(30, 58, 138, 0.12); }
+/* soft moving sheen over the magnitude bars */
+.dash-mode .hbar-fill { position: relative; overflow: hidden; }
+.dash-mode .hbar-fill::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: sheen 3.6s ease-in-out 0.8s infinite;
+}
+@keyframes sheen { 0% { transform: translateX(-100%); } 45%, 100% { transform: translateX(100%); } }
+.dash-mode .spark:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(30, 58, 138, 0.10); }
+.dash-mode .spark { transition: transform 0.2s var(--spring), box-shadow 0.2s ease, border-color 0.15s ease; }
+.dash-mode .comment { transition: transform 0.15s ease, border-left-color 0.15s ease; }
+.dash-mode .comment:hover { transform: translateX(3px); border-left-color: var(--accent); }
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
 .tile {
