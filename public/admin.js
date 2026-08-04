@@ -9,6 +9,18 @@ const monthName = (cycle) => {
 // score color: low reads red, middle amber, high green (matches the survey sliders)
 const scoreColor = (v) => (v <= 3 ? '#d6453d' : v <= 6 ? '#e0862f' : v <= 8 ? '#6aa63c' : '#2b8a3e');
 
+// severity color for problem counts: the leading problem reads red, close
+// runners-up amber, the rest blue; zero-vote rows fade to gray
+const severityColor = (n, top) =>
+  n === 0 ? '#c3cad6' : n === top ? '#d6453d' : n >= top / 2 ? '#e0862f' : '#2563eb';
+
+// what-motivates-you is semantic, not ranked: intrinsic reads green,
+// transactional amber/blue, "no idea" is the red flag
+const MOTIVATION_COLORS = { work: '#2b8a3e', benefits: '#2563eb', salary: '#e0862f', no_idea: '#d6453d' };
+
+// participation health
+const pctColor = (p) => (p >= 70 ? '#2b8a3e' : p >= 40 ? '#e0862f' : '#d6453d');
+
 async function api(path, opts) {
   const res = await fetch(path, opts);
   const body = await res.json().catch(() => ({}));
@@ -97,14 +109,16 @@ function renderHeader() {
 function renderTiles() {
   const t = data.tokens;
   const pct = t.issued ? Math.round((100 * t.used) / t.issued) : null;
+  const respColor = data.count >= data.minResponsesToShow ? '#2b8a3e' : '#e0862f';
+  const partColor = pct == null ? 'var(--ink)' : pctColor(pct);
   $('tiles').innerHTML = `
-    <div class="tile"><div class="label">Responses · ${monthName(data.cycle)}</div>
-      <div class="value" data-count="${data.count}">0</div>
+    <div class="tile" style="border-top-color:${respColor}"><div class="label">Responses · ${monthName(data.cycle)}</div>
+      <div class="value" style="color:${respColor}" data-count="${data.count}">0</div>
       <div class="note">shown only when ≥ ${data.minResponsesToShow} (anonymity floor)</div></div>
-    <div class="tile"><div class="label">Participation</div>
-      <div class="value"><span data-count="${t.used}">0</span><span style="font-size:16px;color:var(--muted)"> / ${t.issued}</span></div>
-      <div class="note">${pct == null ? 'no links sent yet' : pct + '% submitted · ' + t.opened + ' opened their link'}</div></div>
-    <div class="tile"><div class="label">Months of data</div>
+    <div class="tile" style="border-top-color:${pct == null ? 'var(--navy-2)' : partColor}"><div class="label">Participation</div>
+      <div class="value" style="color:${partColor}"><span data-count="${t.used}">0</span><span style="font-size:16px;color:var(--muted)"> / ${t.issued}</span></div>
+      <div class="note">${pct == null ? 'no links sent yet' : `<span style="color:${partColor};font-weight:600">${pct}% submitted</span> · ${t.opened} opened their link`}</div></div>
+    <div class="tile" style="border-top-color:var(--navy-2)"><div class="label">Months of data</div>
       <div class="value" data-count="${data.cycles.length}">0</div>
       <div class="note">trend history</div></div>`;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -128,7 +142,7 @@ function hbar(label, value, max, valText, deltaHtml = '', color = '') {
   return `<div class="hbar-row">
     <div class="hbar-label">${label}</div>
     <div class="hbar-track"><div class="hbar-fill" style="${style}"></div></div>
-    <div class="hbar-val">${valText}${deltaHtml}</div>
+    <div class="hbar-val"${color ? ` style="color:${color}"` : ''}>${valText}${deltaHtml}</div>
   </div>`;
 }
 
@@ -162,16 +176,15 @@ function renderResults() {
   $('sparks').innerHTML = meta.sliders.map((s) => sparkCard(s)).join('');
   attachSparkTips();
 
-  const dist = (counts, items, mount) => {
-    const max = Math.max(1, ...Object.values(counts));
-    $(mount).innerHTML = items
+  const dist = (counts, items, mount, colorOf) => {
+    const rows = items
       .map((i) => ({ ...i, n: counts[i.key] || 0 }))
-      .sort((a, b) => b.n - a.n)
-      .map((i) => hbar(i.label, i.n, max, String(i.n)))
-      .join('');
+      .sort((a, b) => b.n - a.n);
+    const max = Math.max(1, ...rows.map((r) => r.n));
+    $(mount).innerHTML = rows.map((i) => hbar(i.label, i.n, max, String(i.n), '', colorOf(i, max))).join('');
   };
-  dist(data.blockers, meta.blockers, 'blocker-bars');
-  dist(data.processes, meta.processes, 'process-bars');
+  dist(data.blockers, meta.blockers, 'blocker-bars', (i, top) => severityColor(i.n, top));
+  dist(data.processes, meta.processes, 'process-bars', (i, top) => severityColor(i.n, top));
   const others = (list) => (list || []).map((c) => `<div class="comment">${esc(c)}</div>`).join('');
   if ((data.blockerOthers || []).length) {
     $('blocker-bars').insertAdjacentHTML('beforeend',
@@ -182,18 +195,20 @@ function renderResults() {
       `<h2 style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:12px 0 4px">"Other" write-ins</h2>${others(data.processOthers)}`);
   }
   if (data.motivations) {
-    dist(data.motivations, meta.motivations, 'motivation-bars');
+    dist(data.motivations, meta.motivations, 'motivation-bars',
+      (i) => (i.n === 0 ? '#c3cad6' : MOTIVATION_COLORS[i.key] || '#2563eb'));
     const notes = data.motivationNotes || [];
     const groups = meta.motivations
       .map((m) => ({
         label: m.label,
+        color: MOTIVATION_COLORS[m.key] || '#2563eb',
         items: notes.filter((n) => n.m === m.key).map((n) => n.text),
       }))
       .filter((g) => g.items.length);
     $('motivation-notes').innerHTML = groups.length
       ? groups.map((g) => `
-          <h2 style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 4px">${esc(g.label)} · ${g.items.length}</h2>
-          ${g.items.map((c) => `<div class="comment">${esc(c)}</div>`).join('')}`).join('')
+          <h2 style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:${g.color};margin:14px 0 4px">${esc(g.label)} · ${g.items.length}</h2>
+          ${g.items.map((c) => `<div class="comment" style="border-left-color:${g.color}">${esc(c)}</div>`).join('')}`).join('')
       : '<p class="hint">No explanations this month.</p>';
   }
 
@@ -219,8 +234,8 @@ function sparkCard(s) {
   const pts = data.trends[s.key];
   const now = data.averages[s.key];
   if (pts.length < 2) {
-    return `<div class="spark"><div class="label">${s.label}</div>
-      <div class="now">${now.toFixed(1)}</div>
+    return `<div class="spark" style="border-left:3px solid ${scoreColor(now)}"><div class="label">${s.label}</div>
+      <div class="now" style="color:${scoreColor(now)}">${now.toFixed(1)}</div>
       <p class="hint" style="margin:4px 0 0">Trend appears after two months of data.</p></div>`;
   }
   const W = 200, H = 48, PAD = 6;
@@ -232,7 +247,7 @@ function sparkCard(s) {
   const circles = pts.map((p, i) =>
     `<circle cx="${x(i).toFixed(1)}" cy="${y(p.avg).toFixed(1)}" r="9" fill="transparent"
        data-tip="${monthName(p.cycle)}: ${p.avg.toFixed(1)} (${p.n} responses)"/>`).join('');
-  return `<div class="spark"><div class="label">${s.label}</div>
+  return `<div class="spark" style="border-left:3px solid ${c}"><div class="label">${s.label}</div>
     <svg viewBox="0 0 ${W} ${H}" aria-label="${s.label} trend">
       <line x1="${PAD}" y1="${y(5.5).toFixed(1)}" x2="${W - PAD}" y2="${y(5.5).toFixed(1)}" stroke="#e5e7eb" stroke-width="1"/>
       <path d="${path}" fill="none" stroke="${c}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
