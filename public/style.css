@@ -163,7 +163,7 @@ a:hover { color: var(--accent); }
 .admin-head .admin-title, .admin-head h1 { color: #fff; margin: 0; font-size: 22px; }
 .admin-head .sub { color: #9ca3af; font-size: 13px; margin: 4px 0 0; }
 
-.btn-invites {
+.btn-head {
   flex: none;
   display: inline-flex; align-items: center; gap: 8px;
   font-size: 13.5px; font-weight: 600; color: #fff; text-decoration: none;
@@ -173,14 +173,14 @@ a:hover { color: var(--accent); }
   backdrop-filter: blur(4px);
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
-.btn-invites:hover {
+.btn-head:hover {
   color: #fff;
   background: var(--accent);
   border-color: var(--accent);
   transform: translateY(-1px);
   box-shadow: 0 6px 18px rgba(37, 99, 235, 0.45);
 }
-.btn-invites svg { flex: none; }
+.btn-head svg { flex: none; }
 @media (max-width: 640px) { .admin-head { flex-direction: column; align-items: flex-start; } }
 
 /* ---- motion: subtle, professional ---- */
@@ -486,6 +486,68 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
 .pill.urgent-pill { background: var(--red-bg); border-color: #fecaca; color: var(--red); }
 
 .countrow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 4px 0 12px; }
+
+/* ---- invites page ---- */
+.card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 14px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.card-head-actions { display: flex; align-items: center; gap: 10px; }
+.filter-input {
+  width: auto; min-width: 190px;
+  font-size: 13.5px; padding: 7px 12px; border-radius: 8px;
+}
+
+/* setup checklist: one row per thing that must be true before the 27th */
+.setup-row {
+  display: flex; align-items: flex-start; gap: 13px;
+  padding: 14px 2px;
+  border-bottom: 1px solid var(--grid);
+}
+.setup-row:last-child { border-bottom: none; }
+.setup-row:first-child { padding-top: 4px; }
+.setup-dot {
+  flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 6px;
+  position: relative;
+}
+.setup-dot.ok { background: var(--good); }
+.setup-dot.warn { background: var(--amber); }
+.setup-dot.bad { background: var(--red); }
+.setup-dot.ok::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  animation: pulse 2.4s ease-out infinite;
+}
+.setup-text { flex: 1; min-width: 0; }
+.setup-title { font-weight: 600; font-size: 14px; }
+.setup-detail { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+.setup-detail code {
+  font-family: ui-monospace, monospace; font-size: 12px;
+  background: var(--blue-bg); border: 1px solid #d4e3fb;
+  border-radius: 4px; padding: 1px 5px; color: var(--accent-deep);
+}
+.setup-action { flex: none; align-self: center; }
+.btn-sm-link { font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+
+/* delivery status chips */
+.chip {
+  display: inline-block; font-size: 12px; font-weight: 600;
+  border-radius: 6px; padding: 3px 9px; border: 1px solid transparent;
+  white-space: nowrap;
+}
+.chip.ok { background: var(--green-bg); border-color: #bbf7d0; color: var(--good); }
+.chip.bad { background: var(--red-bg); border-color: #fecaca; color: var(--red); cursor: help; }
+.chip.idle { background: #f3f4f6; border-color: var(--grid); color: var(--muted); }
+
+/* a 22-row roster shouldn't own the page */
+.table-scroll {
+  max-height: 330px; overflow-y: auto;
+  border: 1px solid var(--grid); border-radius: 10px;
+}
+.table-scroll .status-table th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--surface); border-bottom: 1px solid var(--grid);
+}
+.table-scroll .status-table td:first-child, .table-scroll .status-table th:first-child { padding-left: 14px; }
 
 .status-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .status-table th {

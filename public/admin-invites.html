@@ -12,32 +12,54 @@
   <link rel="stylesheet" href="/style.css">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
-<body>
+<body class="dash-mode">
 <main class="wide">
   <header class="admin-head">
-    <h1 class="admin-title">Invites</h1>
-    <p class="sub"><a href="/admin" style="color:#9ca3af">← Back to dashboard</a> · one unique link per person, automatic on the 27th</p>
+    <div>
+      <h1 class="admin-title">Invites</h1>
+      <p class="sub">One unique, single-use link per person — sent automatically on the 27th.</p>
+    </div>
+    <a href="/admin" class="btn-head">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="m15 18-6-6 6-6"/></svg>
+      Dashboard
+    </a>
   </header>
   <div id="demo-banner" class="banner demo hidden">DEMO MODE: fake seeded data, survey window forced open.</div>
 
-    <div class="card" id="email-card">
-      <h2>Invites <span class="hint" style="display:inline">(automatic on the 27th)</span></h2>
-      <div id="mail-status" class="banner info" style="margin-top:0"></div>
-      <div id="gmail-area" class="btnrow" style="margin-top:0"></div>
-      <div id="invite-counts" class="countrow"></div>
-      <div id="recipient-status"></div>
-      <div class="btnrow" style="margin-top:10px;align-items:center;gap:12px">
-        <button class="secondary btn-sm" id="team-sync">🔄 Sync team</button>
-        <span class="hint" id="team-sync-note" style="align-self:center;margin:0"></span>
+  <!-- 1 — is the pipeline actually going to fire? -->
+  <div class="card">
+    <h2>Delivery setup</h2>
+    <div id="setup-rows"></div>
+  </div>
+
+  <!-- 2 — this month at a glance -->
+  <div class="tiles" id="invite-tiles"></div>
+
+  <!-- 3 — who gets a link -->
+  <div class="card">
+    <div class="card-head">
+      <h2 style="margin:0">Recipients <span class="hint" id="rcpt-count" style="display:inline"></span></h2>
+      <div class="card-head-actions">
+        <input type="search" id="rcpt-filter" class="filter-input" placeholder="Filter by name…" autocomplete="off">
+        <button class="secondary btn-sm" id="team-sync">Sync team</button>
       </div>
-      <label class="q" for="test-email">Send a test invite to one address</label>
-      <div class="btnrow" style="margin-top:0">
-        <input type="email" id="test-email" style="max-width:320px" placeholder="you@k-brands.com">
-        <button class="secondary" id="email-test">Send test</button>
-        <a href="/admin/email-preview" target="_blank" style="align-self:center;font-weight:700">Preview the email ↗</a>
-      </div>
-      <div id="email-msg" class="banner hidden" style="margin-bottom:0"></div>
     </div>
+    <div id="recipient-status"></div>
+    <p class="hint" id="team-sync-note" style="margin:12px 0 0"></p>
+  </div>
+
+  <!-- 4 — prove it works before the 27th -->
+  <div class="card">
+    <h2>Send a test invite</h2>
+    <p class="hint" style="margin-top:0">Sends one real invite to a single address so you can check how it lands.
+    This mints a working survey link — don't send it to a teammate before the window opens.</p>
+    <div class="btnrow" style="margin-top:0">
+      <input type="email" id="test-email" style="max-width:320px" placeholder="you@k-brands.com">
+      <button class="secondary" id="email-test">Send test</button>
+      <a href="/admin/email-preview" target="_blank" style="align-self:center;font-weight:600">Preview the email ↗</a>
+    </div>
+    <div id="email-msg" class="banner hidden" style="margin-bottom:0"></div>
+  </div>
 
   <footer>Team Pulse admin</footer>
 </main>

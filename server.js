@@ -482,7 +482,9 @@ app.post('/api/admin/email-test', requireAdmin, async (req, res) => {
   try {
     const result = await sendInvites([email]);
     queueSync('tokens');
-    if (result.failed.length) return res.status(502).json({ error: `Send failed: ${result.failed[0].error}` });
+    // 400, not 502: a proxy (Cloudflare) replaces 5xx bodies with its own error
+    // page, which would hide the actual reason the send failed.
+    if (result.failed.length) return res.status(400).json({ error: `Send failed: ${result.failed[0].error}` });
     res.json({ ok: true, sent: result.sent });
   } catch (e) {
     res.status(400).json({ error: e.message });
