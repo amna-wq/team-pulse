@@ -160,7 +160,12 @@ const chartSpec = (title, sheetId, range, type, anchorRow, anchorCol) => ({
               legendPosition: 'NO_LEGEND',
               axis: [{ position: 'BOTTOM_AXIS' }, { position: 'LEFT_AXIS' }],
               domains: [{ domain: { sourceRange: { sources: [{ sheetId, startRowIndex: range.start, endRowIndex: range.end, startColumnIndex: 0, endColumnIndex: 1 }] } } }],
-              series: [{ series: { sourceRange: { sources: [{ sheetId, startRowIndex: range.start, endRowIndex: range.end, startColumnIndex: 1, endColumnIndex: 2 }] } }, targetAxis: 'LEFT_AXIS' }],
+              // BAR is horizontal, so its value axis is the bottom one; COLUMN
+              // is vertical and uses the left. Sheets rejects the wrong pairing.
+              series: [{
+                series: { sourceRange: { sources: [{ sheetId, startRowIndex: range.start, endRowIndex: range.end, startColumnIndex: 1, endColumnIndex: 2 }] } },
+                targetAxis: type === 'BAR' ? 'BOTTOM_AXIS' : 'LEFT_AXIS',
+              }],
             },
       },
       position: {
