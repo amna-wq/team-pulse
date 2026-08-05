@@ -129,7 +129,7 @@ function renderRecipients() {
   const all = data.recipients;
   const q = $('rcpt-filter').value.trim().toLowerCase();
   const list = q
-    ? all.filter((r) => `${r.name || ''} ${r.email}`.toLowerCase().includes(q))
+    ? all.filter((r) => `${r.name || ''} ${r.role || ''} ${r.email}`.toLowerCase().includes(q))
     : all;
 
   const failed = all.filter((r) => r.last_error).length;
@@ -160,16 +160,17 @@ function renderRecipients() {
   const initials = (n) => n.split(/\s+/).slice(0, 2).map((w) => w.charAt(0).toUpperCase()).join('');
   $('recipient-status').innerHTML = `<div class="table-scroll">
     <table class="status-table">
-      <thead><tr><th>Name</th><th>Email</th><th style="width:150px">Invite</th></tr></thead>
+      <thead><tr><th>Name</th><th>Role</th><th>Email</th><th style="width:150px">Invite</th></tr></thead>
       <tbody>${list.map((r) => {
         const name = r.name || r.email.split('@')[0];
         return `<tr>
           <td><div class="person">
             <span class="avatar-i">${esc(initials(name))}</span>
-            <span>${esc(name)}${data.sageConfigured && r.name_source !== 'sagehr'
-              ? ' <span class="hint" style="display:inline" title="Sage HR has no name on file for this person — derived from the email address">(derived)</span>'
+            <span>${esc(name)}${r.name_source === 'derived'
+              ? ' <span class="hint" style="display:inline" title="No name on file — derived from the email address">(derived)</span>'
               : ''}</span>
           </div></td>
+          <td class="mono-cell">${esc(r.role || '—')}</td>
           <td class="mono-cell">${esc(r.email)}</td>
           <td>${cell(r)}</td>
         </tr>`;
@@ -185,11 +186,12 @@ function renderSyncNote() {
   if (d.sageConfigured) {
     note.innerHTML = `Names and addresses come live from the <strong>Sage HR</strong> employee directory,
       and refresh on every sync and before each monthly send.${esc(when)}`;
+  } else if (d.teamSource === 'manual') {
+    note.innerHTML = `Names, roles and addresses come from the confirmed roster in <code>.env</code>.
+      Editing that list and hitting Sync updates this table; anyone removed there stops receiving invites.${esc(when)}`;
   } else {
-    const fallback = d.teamSource === 'manual' ? 'the TEAM_EMAILS list in .env' : 'the BigQuery roster';
-    note.innerHTML = `<span class="warn-note">Sage HR is not connected yet</span> — running on ${fallback},
-      with names derived from each address. Add <code>SAGEHR_SUBDOMAIN</code> and <code>SAGEHR_API_KEY</code>
-      to <code>.env</code> and restart; this page then pulls real names live from the directory.${esc(when)}`;
+    note.innerHTML = `<span class="warn-note">No roster configured</span> — falling back to the BigQuery
+      table, with names derived from each address.${esc(when)}`;
   }
 }
 

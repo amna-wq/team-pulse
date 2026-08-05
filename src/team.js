@@ -9,11 +9,26 @@ const { SAGEHR_SUBDOMAIN, SAGEHR_API_KEY } = process.env;
 const BQ_PROJECT = process.env.BQ_PROJECT || 'newdatonproject';
 
 export const sageConfigured = () => !!(SAGEHR_SUBDOMAIN && SAGEHR_API_KEY);
+
+// TEAM_EMAILS entries are separated by ";" or newlines, and each one may be a
+// bare address or the full form:  Full Name <email@host> | Job title
+// Bare space/comma-separated lists still parse, so older .env files keep working.
+const ENTRY_RX = /^\s*(?:(.*?)\s*<\s*([^>]+?)\s*>|([^|<>]+?))\s*(?:\|\s*(.*?))?\s*$/;
 const manualList = () =>
   (process.env.TEAM_EMAILS || '')
-    .split(/[\s,;]+/)
-    .map((e) => e.trim().toLowerCase())
-    .filter((e) => EMAIL_RX.test(e));
+    .split(/[;\n]+/)
+    .flatMap((chunk) => (chunk.includes('<') ? [chunk] : chunk.split(/[\s,]+/)))
+    .map((entry) => {
+      const m = ENTRY_RX.exec(entry);
+      if (!m) return null;
+      const email = String(m[2] || m[3] || '').trim().toLowerCase();
+      if (!EMAIL_RX.test(email)) return null;
+      const name = (m[1] || '').trim();
+      const role = (m[4] || '').trim();
+      return { email, name, role };
+    })
+    .filter(Boolean);
+
 export const teamSource = () =>
   sageConfigured() ? 'sagehr' : manualList().length ? 'manual' : 'bigquery';
 
@@ -48,7 +63,8 @@ async function fetchFromSage() {
       const full = String(
         emp.full_name || [emp.first_name, emp.last_name].filter(Boolean).join(' ')
       ).trim();
-      byEmail.set(email, { email, name: full || nameFromEmail(email), fromDirectory: !!full });
+      const role = String(emp.position?.name || emp.position || emp.job_title || '').trim();
+      byEmail.set(email, { email, name: full || nameFromEmail(email), role, fromDirectory: !!full });
     }
     totalPages = body.meta?.total_pages || 1;
     page++;
@@ -85,13 +101,28 @@ function fetchFromBQ() {
   });
 }
 
-// Always returns [{ email, name, fromDirectory }] — Sage HR is the only
-// source that supplies real names; the others get a derived one.
+// Always returns [{ email, name, role, nameSource }]. nameSource records where
+// the name actually came from — 'sagehr', 'roster' (typed into TEAM_EMAILS), or
+// 'derived' (guessed from the address) — so the UI never passes a guess off as
+// confirmed directory data.
 export async function fetchTeamEmails() {
-  if (sageConfigured()) return fetchFromSage();
-  const derive = (emails) =>
-    [...new Set(emails)].map((email) => ({ email, name: nameFromEmail(email), fromDirectory: false }));
+  if (sageConfigured()) {
+    return (await fetchFromSage()).map((p) => ({
+      email: p.email,
+      name: p.name,
+      role: p.role || '',
+      nameSource: p.fromDirectory ? 'sagehr' : 'derived',
+    }));
+  }
   const manual = manualList();
-  if (manual.length) return derive(manual);
-  return derive(await fetchFromBQ());
+  const rows = manual.length
+    ? manual
+    : [...new Set(await fetchFromBQ())].map((email) => ({ email, name: '', role: '' }));
+  const seen = new Set();
+  return rows.filter((r) => !seen.has(r.email) && seen.add(r.email)).map((r) => ({
+    email: r.email,
+    name: r.name || nameFromEmail(r.email),
+    role: r.role || '',
+    nameSource: r.name ? 'roster' : 'derived',
+  }));
 }

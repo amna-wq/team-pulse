@@ -36,6 +36,7 @@ for (const sql of [
   'ALTER TABLE recipients ADD COLUMN last_error TEXT',
   'ALTER TABLE recipients ADD COLUMN name TEXT',
   'ALTER TABLE recipients ADD COLUMN name_source TEXT',
+  'ALTER TABLE recipients ADD COLUMN role TEXT',
   'ALTER TABLE responses ADD COLUMN motivation TEXT',
   'ALTER TABLE responses ADD COLUMN motivation_why TEXT',
   'ALTER TABLE responses ADD COLUMN blocker_other TEXT',
@@ -379,7 +380,7 @@ app.get('/api/admin/recipients', requireAdmin, (req, res) => {
     .get(cycle);
   res.json({
     // Per-person: only delivery status. Opened/submitted stay aggregate-only by design.
-    recipients: db.prepare('SELECT email, name, name_source, last_sent_at, last_error FROM recipients ORDER BY COALESCE(name, email)').all(),
+    recipients: db.prepare('SELECT email, name, name_source, role, last_sent_at, last_error FROM recipients ORDER BY COALESCE(name, email)').all(),
     sageConfigured: sageConfigured(),
     counts,
     mailConfigured: mailConfigured(),
@@ -394,17 +395,19 @@ app.get('/api/admin/recipients', requireAdmin, (req, res) => {
 
 // Refresh the recipient list from the BigQuery roster. Existing rows keep
 // their delivery status; people who left the roster are removed.
-// `people` is [{ email, name, fromDirectory }] from src/team.js. Names refresh
-// on every sync so a Sage HR rename lands here without any manual step.
+// `people` is [{ email, name, role, nameSource }] from src/team.js. Names and
+// roles refresh on every sync, so a rename at the source lands here with no
+// manual step. Anyone missing from the source is dropped.
 function syncTeamFromBQ(people) {
   const emails = people.map((p) => p.email);
   db.exec('BEGIN');
   try {
     const ins = db.prepare(
-      `INSERT INTO recipients (email, name, name_source) VALUES (?, ?, ?)
-       ON CONFLICT(email) DO UPDATE SET name = excluded.name, name_source = excluded.name_source`
+      `INSERT INTO recipients (email, name, name_source, role) VALUES (?, ?, ?, ?)
+       ON CONFLICT(email) DO UPDATE SET
+         name = excluded.name, name_source = excluded.name_source, role = excluded.role`
     );
-    for (const p of people) ins.run(p.email, p.name, p.fromDirectory ? 'sagehr' : 'derived');
+    for (const p of people) ins.run(p.email, p.name, p.nameSource, p.role);
     const del = db.prepare(
       `DELETE FROM recipients WHERE email NOT IN (${emails.map(() => '?').join(',')})`
     );
