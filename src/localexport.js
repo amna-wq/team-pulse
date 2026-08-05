@@ -1,57 +1,23 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { cycles, monthLabel, monthStats, detailRows, DETAIL_HEADERS, trendTable } from './monthly.js';
+import { cycles, monthStats, detailRows, DETAIL_HEADERS, trendTable } from './monthly.js';
 
 // The copy that lives on the Mac itself.
 //
 // The Google Sheet is the shareable/durable home, but it only exists once
 // Google is connected — and Google Drive for Desktop isn't installed, so the
-// sheet never lands on this machine by itself. This writes the same data to a
-// real folder: one CSV per month, a trends CSV, and a self-contained HTML
-// dashboard with charts that opens straight in a browser. No dependencies.
+// sheet never lands on this machine by itself. This writes ONE self-contained
+// HTML dashboard: every month, every chart, every response, no dependencies
+// and nothing external to load. Opens straight in a browser.
 
 export const EXPORT_DIR =
   process.env.LOCAL_EXPORT_DIR || path.join(os.homedir(), 'Team Pulse Data');
 
-const csvCell = (v) => {
-  const s = v === null || v === undefined ? '' : String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
-const toCsv = (rows) => rows.map((r) => r.map(csvCell).join(',')).join('\n') + '\n';
+const DASHBOARD = 'Team Pulse Dashboard.html';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-function monthCsv(cycle) {
-  const s = monthStats(cycle);
-  const rows = [
-    [`Team Pulse — ${s.label}`],
-    [],
-    ['Responses', s.responses],
-    ['Invited', s.invited],
-    ['Participation %', s.participation],
-    ['Written comments', s.comments],
-    ['Private concerns', s.concerns],
-    [],
-    ['Averages out of 10', 'Score'],
-    ...s.averages.map((a) => [a.label, a.avg]),
-    [],
-    ['Biggest blocker', 'People'],
-    ...s.blockers.map((b) => [b.label, b.count]),
-    [],
-    ['Process to improve', 'People'],
-    ...s.processes.map((p) => [p.label, p.count]),
-    [],
-    ['What motivates the team', 'People'],
-    ...s.motivations.map((m) => [m.label, m.count]),
-    [],
-    ['EVERY RESPONSE THIS MONTH (anonymous, order is randomised)'],
-    DETAIL_HEADERS,
-    ...detailRows(cycle),
-  ];
-  return toCsv(rows);
-}
 
 // ---- charts, hand-drawn as inline SVG so the file needs nothing external ----
 
@@ -176,14 +142,8 @@ let running = false;
 export function writeLocalExport() {
   try {
     fs.mkdirSync(EXPORT_DIR, { recursive: true });
-    const months = cycles();
-    for (const c of months) {
-      fs.writeFileSync(path.join(EXPORT_DIR, `${monthLabel(c).replace(/ /g, '-')}.csv`), monthCsv(c));
-    }
-    const t = trendTable();
-    fs.writeFileSync(path.join(EXPORT_DIR, 'Trends.csv'), toCsv([t.header, ...t.rows]));
-    fs.writeFileSync(path.join(EXPORT_DIR, 'Team Pulse Dashboard.html'), dashboardHtml());
-    return { dir: EXPORT_DIR, months: months.length };
+    fs.writeFileSync(path.join(EXPORT_DIR, DASHBOARD), dashboardHtml());
+    return { dir: EXPORT_DIR, months: cycles().length };
   } catch (e) {
     console.warn('[local-export] failed:', e.message);
     return null;
