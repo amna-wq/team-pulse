@@ -19,9 +19,20 @@ export const teamSource = () =>
 
 const EMAIL_RX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+// Only Sage HR knows real names. For every other source we derive a display
+// name from the address ("muhammad.faiz@…" -> "Muhammad Faiz") and mark it
+// derived, so the UI never passes a guess off as directory data.
+export function nameFromEmail(email) {
+  return String(email).split('@')[0]
+    .split(/[._\-+]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
 async function fetchFromSage() {
   const base = `https://${SAGEHR_SUBDOMAIN}.sage.hr/api/employees`;
-  const emails = new Set();
+  const byEmail = new Map();
   let page = 1;
   let totalPages = 1;
   do {
@@ -33,13 +44,17 @@ async function fetchFromSage() {
     const body = await r.json();
     for (const emp of body.data || []) {
       const email = String(emp.email || emp.work_email || '').trim().toLowerCase();
-      if (EMAIL_RX.test(email)) emails.add(email);
+      if (!EMAIL_RX.test(email)) continue;
+      const full = String(
+        emp.full_name || [emp.first_name, emp.last_name].filter(Boolean).join(' ')
+      ).trim();
+      byEmail.set(email, { email, name: full || nameFromEmail(email), fromDirectory: !!full });
     }
     totalPages = body.meta?.total_pages || 1;
     page++;
   } while (page <= totalPages);
-  if (!emails.size) throw new Error('Sage HR returned no employee emails.');
-  return [...emails];
+  if (!byEmail.size) throw new Error('Sage HR returned no employee emails.');
+  return [...byEmail.values()];
 }
 
 // Fallback only — the BusinessOS roster table can lag behind reality.
@@ -70,9 +85,13 @@ function fetchFromBQ() {
   });
 }
 
+// Always returns [{ email, name, fromDirectory }] — Sage HR is the only
+// source that supplies real names; the others get a derived one.
 export async function fetchTeamEmails() {
   if (sageConfigured()) return fetchFromSage();
+  const derive = (emails) =>
+    [...new Set(emails)].map((email) => ({ email, name: nameFromEmail(email), fromDirectory: false }));
   const manual = manualList();
-  if (manual.length) return [...new Set(manual)];
-  return fetchFromBQ();
+  if (manual.length) return derive(manual);
+  return derive(await fetchFromBQ());
 }

@@ -26,29 +26,23 @@
   </header>
   <div id="demo-banner" class="banner demo hidden">DEMO MODE: fake seeded data, survey window forced open.</div>
 
-  <!-- 1 — is the pipeline actually going to fire? -->
-  <div class="card">
-    <h2>Delivery setup</h2>
-    <div id="setup-rows"></div>
-  </div>
-
-  <!-- 2 — this month at a glance -->
+  <!-- 1 — this month at a glance -->
   <div class="tiles" id="invite-tiles"></div>
 
-  <!-- 3 — who gets a link -->
+  <!-- 2 — who gets a link (names live from Sage HR) -->
   <div class="card">
     <div class="card-head">
       <h2 style="margin:0">Recipients <span class="hint" id="rcpt-count" style="display:inline"></span></h2>
       <div class="card-head-actions">
         <input type="search" id="rcpt-filter" class="filter-input" placeholder="Filter by name…" autocomplete="off">
-        <button class="secondary btn-sm" id="team-sync">Sync team</button>
+        <button class="secondary btn-sm" id="team-sync">Sync from Sage HR</button>
       </div>
     </div>
     <div id="recipient-status"></div>
     <p class="hint" id="team-sync-note" style="margin:12px 0 0"></p>
   </div>
 
-  <!-- 4 — prove it works before the 27th -->
+  <!-- 3 — prove it works before the 27th -->
   <div class="card">
     <h2>Send a test invite</h2>
     <p class="hint" style="margin-top:0">Sends one real invite to a single address so you can check how it lands.
@@ -56,9 +50,15 @@
     <div class="btnrow" style="margin-top:0">
       <input type="email" id="test-email" style="max-width:320px" placeholder="you@k-brands.com">
       <button class="secondary" id="email-test">Send test</button>
-      <a href="/admin/email-preview" target="_blank" style="align-self:center;font-weight:600">Preview the email ↗</a>
+      <button class="secondary" id="email-preview">Preview the email</button>
     </div>
     <div id="email-msg" class="banner hidden" style="margin-bottom:0"></div>
+  </div>
+
+  <!-- 4 — how sending is wired up -->
+  <div class="card">
+    <h2>Delivery setup</h2>
+    <div id="setup-rows"></div>
   </div>
 
   <footer>Team Pulse admin</footer>

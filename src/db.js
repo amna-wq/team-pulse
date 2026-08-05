@@ -79,6 +79,8 @@ db.exec(`
   -- invited, and the tokens table stores hashed links — but the raw token is
   -- generated, emailed, and discarded in one step (src/mailer.js). No table
   -- links an email address to a token or to a response.
+  -- name/name_source come from the live Sage HR directory when it is
+  -- configured; otherwise the name is derived from the address.
   CREATE TABLE IF NOT EXISTS recipients (
     id INTEGER PRIMARY KEY,
     email TEXT NOT NULL UNIQUE

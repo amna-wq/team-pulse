@@ -7,7 +7,7 @@ import { currentCycle, windowState, windowFor, setOverride, DEMO_MODE } from './
 import { SLIDERS, BLOCKERS, PROCESSES, MOTIVATIONS, OPEN_TEXT_LABEL, sliderKeys, blockerKeys, processKeys, motivationKeys } from './src/questions.js';
 import { createPeerRouter } from './src/phase2-peer-feedback.js';
 import { sendInvites, mailConfigured, renderInviteEmail, baseUrl, gmailStatus, gmailExchangeCode, gmailDisconnect } from './src/mailer.js';
-import { fetchTeamEmails, teamSource } from './src/team.js';
+import { fetchTeamEmails, teamSource, sageConfigured } from './src/team.js';
 import { queueSync, syncAll, restoreFromSheet, ensureSpreadsheet, sheetUrl, MIRRORED_TABLES } from './src/sheets.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -34,6 +34,8 @@ for (const sql of [
   'ALTER TABLE tokens ADD COLUMN opened INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE recipients ADD COLUMN last_sent_at TEXT',
   'ALTER TABLE recipients ADD COLUMN last_error TEXT',
+  'ALTER TABLE recipients ADD COLUMN name TEXT',
+  'ALTER TABLE recipients ADD COLUMN name_source TEXT',
   'ALTER TABLE responses ADD COLUMN motivation TEXT',
   'ALTER TABLE responses ADD COLUMN motivation_why TEXT',
   'ALTER TABLE responses ADD COLUMN blocker_other TEXT',
@@ -377,7 +379,8 @@ app.get('/api/admin/recipients', requireAdmin, (req, res) => {
     .get(cycle);
   res.json({
     // Per-person: only delivery status. Opened/submitted stay aggregate-only by design.
-    recipients: db.prepare('SELECT email, last_sent_at, last_error FROM recipients ORDER BY email').all(),
+    recipients: db.prepare('SELECT email, name, name_source, last_sent_at, last_error FROM recipients ORDER BY COALESCE(name, email)').all(),
+    sageConfigured: sageConfigured(),
     counts,
     mailConfigured: mailConfigured(),
     gmail: gmailStatus(),
@@ -391,11 +394,17 @@ app.get('/api/admin/recipients', requireAdmin, (req, res) => {
 
 // Refresh the recipient list from the BigQuery roster. Existing rows keep
 // their delivery status; people who left the roster are removed.
-function syncTeamFromBQ(emails) {
+// `people` is [{ email, name, fromDirectory }] from src/team.js. Names refresh
+// on every sync so a Sage HR rename lands here without any manual step.
+function syncTeamFromBQ(people) {
+  const emails = people.map((p) => p.email);
   db.exec('BEGIN');
   try {
-    const ins = db.prepare('INSERT INTO recipients (email) VALUES (?) ON CONFLICT(email) DO NOTHING');
-    for (const e of emails) ins.run(e);
+    const ins = db.prepare(
+      `INSERT INTO recipients (email, name, name_source) VALUES (?, ?, ?)
+       ON CONFLICT(email) DO UPDATE SET name = excluded.name, name_source = excluded.name_source`
+    );
+    for (const p of people) ins.run(p.email, p.name, p.fromDirectory ? 'sagehr' : 'derived');
     const del = db.prepare(
       `DELETE FROM recipients WHERE email NOT IN (${emails.map(() => '?').join(',')})`
     );
@@ -412,12 +421,14 @@ function syncTeamFromBQ(emails) {
 
 app.post('/api/admin/recipients-sync', requireAdmin, async (req, res) => {
   try {
-    const emails = await fetchTeamEmails();
-    syncTeamFromBQ(emails);
+    const people = await fetchTeamEmails();
+    syncTeamFromBQ(people);
     queueSync('recipients');
-    res.json({ ok: true, count: emails.length });
+    res.json({ ok: true, count: people.length, source: teamSource() });
   } catch (e) {
-    res.status(502).json({ error: e.message });
+    // 400, not 502 — a proxy would replace a 5xx body and hide the real reason
+    // the directory sync failed (bad Sage key, bq not logged in, …).
+    res.status(400).json({ error: e.message });
   }
 });
 

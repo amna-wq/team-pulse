@@ -19,6 +19,7 @@ async function init() {
   if (!admin) { location.href = '/admin'; return; }
   $('team-sync').addEventListener('click', syncTeam);
   $('email-test').addEventListener('click', sendTestEmail);
+  $('email-preview').addEventListener('click', () => window.open('/admin/email-preview', '_blank'));
   $('rcpt-filter').addEventListener('input', renderRecipients);
   render();
 }
@@ -32,7 +33,7 @@ async function render() {
   renderSyncNote();
 }
 
-// ---- 1. delivery setup: three things that must be true before the 27th ----
+// ---- delivery setup: how sending is wired up ----
 
 function setupRow({ state, title, detail, action }) {
   return `<div class="setup-row">
@@ -70,36 +71,6 @@ function renderSetup() {
       detail: 'One value is missing: paste <code>GOOGLE_CLIENT_SECRET</code> into <code>.env</code>, restart the app, then connect.',
     }));
   }
-
-  // b) will the 27th happen by itself?
-  if (d.autoEmail && !meta.demoMode) {
-    rows.push(setupRow({
-      state: 'ok', title: 'Auto-send is on',
-      detail: 'Invites go out by themselves when the window opens on the 27th at 9:00.',
-    }));
-  } else if (d.autoEmail) {
-    rows.push(setupRow({
-      state: 'warn', title: 'Auto-send is on, but paused by demo mode',
-      detail: 'Nothing is emailed while <code>DEMO_MODE=true</code>. Set it to false in <code>.env</code> to go live.',
-    }));
-  } else {
-    rows.push(setupRow({
-      state: 'bad', title: 'Auto-send is off',
-      detail: 'Set <code>AUTO_EMAIL=true</code> in <code>.env</code> so the 27th happens without you.',
-    }));
-  }
-
-  // c) is the data landing anywhere durable?
-  rows.push(d.sheetUrl
-    ? setupRow({
-        state: 'ok', title: 'Results are mirrored to Google Sheets',
-        detail: 'Every response is written to your "Team Pulse Data" spreadsheet.',
-        action: `<a class="btn-sm-link" href="${esc(d.sheetUrl)}" target="_blank">Open sheet ↗</a>`,
-      })
-    : setupRow({
-        state: 'warn', title: 'Results sheet not connected',
-        detail: 'Responses live only in the local database. Reconnect Google to add the Sheets mirror.',
-      }));
 
   $('setup-rows').innerHTML = rows.join('');
   const dis = $('gmail-disconnect');
@@ -157,7 +128,9 @@ function renderTiles() {
 function renderRecipients() {
   const all = data.recipients;
   const q = $('rcpt-filter').value.trim().toLowerCase();
-  const list = q ? all.filter((r) => r.email.toLowerCase().includes(q)) : all;
+  const list = q
+    ? all.filter((r) => `${r.name || ''} ${r.email}`.toLowerCase().includes(q))
+    : all;
 
   const failed = all.filter((r) => r.last_error).length;
   const sent = all.filter((r) => !r.last_error && r.last_sent_at).length;
@@ -167,7 +140,7 @@ function renderRecipients() {
 
   if (!all.length) {
     $('recipient-status').innerHTML =
-      '<p class="hint">No team loaded yet — hit <strong>Sync team</strong> to pull the list from your team source.</p>';
+      '<p class="hint">No team loaded yet — hit <strong>Sync from Sage HR</strong> to pull the directory.</p>';
     return;
   }
   if (!list.length) {
@@ -184,40 +157,56 @@ function renderRecipients() {
     return '<span class="chip idle">Not sent yet</span>';
   };
 
+  const initials = (n) => n.split(/\s+/).slice(0, 2).map((w) => w.charAt(0).toUpperCase()).join('');
   $('recipient-status').innerHTML = `<div class="table-scroll">
     <table class="status-table">
-      <thead><tr><th>Team member</th><th style="width:150px">Invite</th></tr></thead>
-      <tbody>${list.map((r) => `<tr>
-        <td>${esc(r.email)}</td>
-        <td>${cell(r)}</td>
-      </tr>`).join('')}</tbody>
+      <thead><tr><th>Name</th><th>Email</th><th style="width:150px">Invite</th></tr></thead>
+      <tbody>${list.map((r) => {
+        const name = r.name || r.email.split('@')[0];
+        return `<tr>
+          <td><div class="person">
+            <span class="avatar-i">${esc(initials(name))}</span>
+            <span>${esc(name)}${data.sageConfigured && r.name_source !== 'sagehr'
+              ? ' <span class="hint" style="display:inline" title="Sage HR has no name on file for this person — derived from the email address">(derived)</span>'
+              : ''}</span>
+          </div></td>
+          <td class="mono-cell">${esc(r.email)}</td>
+          <td>${cell(r)}</td>
+        </tr>`;
+      }).join('')}</tbody>
     </table></div>` +
     (failed ? `<div class="banner err" style="margin-bottom:0">${failed} invite${failed > 1 ? 's' : ''} failed to send — hover a “Failed” chip for the reason.</div>` : '');
 }
 
 function renderSyncNote() {
   const d = data;
-  const source = d.teamSource === 'sagehr' ? 'Sage HR'
-    : d.teamSource === 'manual' ? 'the TEAM_EMAILS list in .env'
-    : 'the BigQuery roster';
-  const when = d.teamSyncedAt ? `, last synced ${new Date(d.teamSyncedAt).toLocaleString()}` : '';
-  $('team-sync-note').textContent =
-    `Pulled from ${source}${when}. The list refreshes by itself before every monthly send.`;
+  const when = d.teamSyncedAt ? ` Last synced ${new Date(d.teamSyncedAt).toLocaleString()}.` : '';
+  const note = $('team-sync-note');
+  if (d.sageConfigured) {
+    note.innerHTML = `Names and addresses come live from the <strong>Sage HR</strong> employee directory,
+      and refresh on every sync and before each monthly send.${esc(when)}`;
+  } else {
+    const fallback = d.teamSource === 'manual' ? 'the TEAM_EMAILS list in .env' : 'the BigQuery roster';
+    note.innerHTML = `<span class="warn-note">Sage HR is not connected yet</span> — running on ${fallback},
+      with names derived from each address. Add <code>SAGEHR_SUBDOMAIN</code> and <code>SAGEHR_API_KEY</code>
+      to <code>.env</code> and restart; this page then pulls real names live from the directory.${esc(when)}`;
+  }
 }
 
 async function syncTeam() {
   const btn = $('team-sync');
+  const label = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Syncing…';
   try {
-    const { count } = await api('/api/admin/recipients-sync', { method: 'POST' });
-    emailMsg(`Synced ${count} people from your team source.`);
+    const { count, source } = await api('/api/admin/recipients-sync', { method: 'POST' });
+    emailMsg(`Synced ${count} people from ${source === 'sagehr' ? 'Sage HR' : 'the fallback list'}.`);
     await render();
   } catch (e) {
     emailMsg(e.message, true);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Sync team';
+    btn.textContent = label;
   }
 }
 
