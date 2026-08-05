@@ -65,7 +65,6 @@ async function submit(e) {
     $('peer-form').classList.add('hidden');
     $('done').classList.remove('hidden');
     window.scrollTo(0, 0);
-    if (typeof confettiBurst === 'function') confettiBurst();
   } else {
     const data = await res.json().catch(() => ({}));
     err.textContent = data.error || 'Something went wrong — please try again.';

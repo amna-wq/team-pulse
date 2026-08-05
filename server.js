@@ -410,7 +410,7 @@ app.get('/api/admin/recipients', requireAdmin, (req, res) => {
 // `people` is [{ email, name, role, nameSource }] from src/team.js. Names and
 // roles refresh on every sync, so a rename at the source lands here with no
 // manual step. Anyone missing from the source is dropped.
-function syncTeamFromBQ(people) {
+function syncTeamRoster(people) {
   const emails = people.map((p) => p.email);
   db.exec('BEGIN');
   try {
@@ -437,7 +437,7 @@ function syncTeamFromBQ(people) {
 app.post('/api/admin/recipients-sync', requireAdmin, async (req, res) => {
   try {
     const people = await fetchTeamEmails();
-    syncTeamFromBQ(people);
+    syncTeamRoster(people);
     queueSync('recipients');
     res.json({ ok: true, count: people.length, source: teamSource() });
   } catch (e) {
@@ -480,27 +480,6 @@ function recordSendResults(results) {
   for (const r of results || []) upd.run(r.ok ? now : null, r.ok ? null : r.error || 'send failed', r.email);
 }
 
-app.post('/api/admin/recipients', requireAdmin, (req, res) => {
-  const emails = [...new Set(
-    String(req.body?.emails || '')
-      .split(/[\n,;]+/)
-      .map((e) => e.trim().toLowerCase())
-      .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
-  )];
-  if (emails.length > 200) return res.status(400).json({ error: 'Max 200 recipients.' });
-  db.exec('BEGIN');
-  try {
-    db.prepare('DELETE FROM recipients').run();
-    const ins = db.prepare('INSERT INTO recipients (email) VALUES (?)');
-    for (const e of emails) ins.run(e);
-    db.exec('COMMIT');
-  } catch (e) {
-    db.exec('ROLLBACK');
-    throw e;
-  }
-  queueSync('recipients');
-  res.json({ ok: true, count: emails.length });
-});
 
 app.post('/api/admin/email-test', requireAdmin, async (req, res) => {
   const email = String(req.body?.email || '').trim();
@@ -548,19 +527,19 @@ app.get('/admin/email-preview', (req, res) => {
 });
 
 // Auto-send: when the monthly window opens, invites go out once per cycle.
-// Requires AUTO_EMAIL=true + SMTP config; never runs in demo mode (the demo
-// window is always "open" and would spam the roster).
+// Requires AUTO_EMAIL=true + a connected email (Gmail or SMTP); never runs in
+// demo mode (the demo window is always "open" and would spam the roster).
 async function autoEmailTick() {
   if (process.env.AUTO_EMAIL !== 'true' || DEMO_MODE || !mailConfigured()) return;
   const win = windowState();
   if (!win.open) return;
   if (db.prepare('SELECT 1 FROM email_log WHERE cycle = ?').get(win.cycle)) return;
-  // Freshen the list from BigQuery right before sending, so joiners/leavers
-  // are always up to date. If BQ is unreachable, fall back to the stored list.
+  // Freshen the roster right before sending, so joiners/leavers are always
+  // up to date. If the source is unreachable, fall back to the stored list.
   try {
-    syncTeamFromBQ(await fetchTeamEmails());
+    syncTeamRoster(await fetchTeamEmails());
   } catch (e) {
-    console.warn('[auto-email] BQ sync failed, using stored list:', e.message);
+    console.warn('[auto-email] roster sync failed, using stored list:', e.message);
   }
   const emails = db.prepare('SELECT email FROM recipients').all().map((r) => r.email);
   if (!emails.length) return;
@@ -578,7 +557,7 @@ setTimeout(() => autoEmailTick().catch((e) => console.error('[auto-email]', e.me
 // startup (and hourly), on top of the refresh right before each send.
 async function rosterRefresh() {
   try {
-    syncTeamFromBQ(await fetchTeamEmails());
+    syncTeamRoster(await fetchTeamEmails());
     queueSync('recipients');
   } catch (e) {
     console.warn('[roster] refresh failed, keeping stored list:', e.message);
@@ -611,6 +590,12 @@ app.use('/api/peer-feedback', createPeerRouter({ requireAdmin }));
 
 app.get('/s/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'survey.html')));
 app.get('/p/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'peer.html')));
+// Pages that don't declare their own icon (e.g. the raw email preview) fall
+// back to /favicon.ico — answer it instead of 404ing on every such visit.
+app.get('/favicon.ico', (req, res) => {
+  res.type('image/svg+xml').send('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📊</text></svg>');
+});
+
 app.get('/thanks', (req, res) => res.sendFile(path.join(__dirname, 'public', 'thanks.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 app.get('/admin/invites', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin-invites.html')));

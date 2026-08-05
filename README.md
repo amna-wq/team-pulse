@@ -8,8 +8,14 @@ ranking people, and it is built so it *can't* become one.
   concerns box** (can be about anyone or anything; goes to management only,
   never to the team, with an "urgent" flag), and optional upward feedback for
   management (start/stop/continue).
-- **Admin dashboard** — password-gated, shows **aggregates only**: averages,
-  month-over-month trends, dropdown distributions, and anonymous comments.
+- **Admin dashboard** — Google sign-in (ADMIN_EMAILS allowlist), shows
+  **aggregates only**: averages, month-over-month trends, dropdown
+  distributions, and anonymous comments. A **Full report** page renders every
+  month with charts, and the same report is written continuously to a local
+  folder (`~/Team Pulse Data/Team Pulse Dashboard.html`).
+- **Data homes** — SQLite is the working copy; every write mirrors to a
+  "Team Pulse Data" Google Sheet (raw backup tabs + one human tab per month
+  with native charts + a Trends tab) and rewrites the local HTML report.
 
 ## Quick start (demo for your manager)
 
@@ -20,10 +26,13 @@ npm run demo        # seeds 5 months of fake data and starts in demo mode
 
 Then open:
 
-- **Dashboard:** http://localhost:8080/admin — password `demo-admin` (or whatever
-  `ADMIN_PASSWORD` you set in `.env` — copy `.env.example` to `.env` to configure;
-  `.env` is loaded automatically by `npm start` and `npm run demo`)
+- **Dashboard:** http://localhost:8080/admin — sign in with Google. Requires
+  `GOOGLE_CLIENT_ID` in `.env` (copy `.env.example` to `.env`) and your email in
+  `ADMIN_EMAILS`. Without it the login page explains what's missing. (A
+  password login endpoint still exists for API use — `ADMIN_PASSWORD`,
+  `demo-admin` by default in demo mode — but the UI is Google-only.)
 - **Survey:** the seed prints a few unused demo links (`/s/<token>`) — submit one live
+- **Full report:** http://localhost:8080/admin/report — all months, all charts
 
 Demo mode forces the survey window open and shows a "fake data" banner
 everywhere. `npm run seed` reseeds at any time.
@@ -105,6 +114,12 @@ gcloud run deploy team-pulse \
   --min-instances 1 --max-instances 1 \
   --set-env-vars ADMIN_PASSWORD=<strong-password>,SESSION_SECRET=<random-hex>
 ```
+
+**Timers don't survive scale-to-zero.** Cloud Run parks the container between
+requests, so the in-process schedulers (auto-send on the 27th, auto roster
+refresh) can't be trusted there. Set `CRON_SECRET` and create a Cloud Scheduler
+job that POSTs to `/api/cron/tick` with header `X-Cron-Secret` every 15
+minutes — it performs the same work idempotently.
 
 SQLite notes for Cloud Run:
 

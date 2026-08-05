@@ -55,17 +55,5 @@
 
 </main>
 <script src="/reveal.js"></script>
-<script>
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const els = document.querySelectorAll('.reveal');
-  if (reduced) {
-    els.forEach((el) => el.classList.add('in-view'));
-  } else {
-    const io = new IntersectionObserver((entries) => {
-      for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in-view'); io.unobserve(e.target); }
-    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
-    els.forEach((el) => io.observe(el));
-  }
-</script>
 </body>
 </html>

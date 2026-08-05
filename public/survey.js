@@ -56,11 +56,12 @@ function paint(input, bubble, verdict) {
 // ---- live progress: how much of the survey is actually answered ----
 // Sliders start at 5, so they only count once the person has moved (or
 // keyboard-adjusted) them — otherwise the meter would open at 60% for free.
-const REQUIRED = ['q_heard', 'q_equipped', 'q_workload', 'q_communication', 'q_meetings', 'q_safe'];
+// Derived from meta so adding a question in questions.js can't desync it.
+const requiredSliders = () => meta.sliders.map((s) => s.key);
 
 function answeredCount() {
   let done = 0;
-  for (const key of REQUIRED) if ($(key)?.dataset.touched) done++;
+  for (const key of requiredSliders()) if ($(key)?.dataset.touched) done++;
   if ($('blocker').value) done++;
   if ($('process').value) done++;
   if ($('motivation').value) done++;
@@ -69,7 +70,7 @@ function answeredCount() {
 }
 
 function updateProgress() {
-  const total = REQUIRED.length + 4;
+  const total = requiredSliders().length + 4;
   const done = answeredCount();
   const pct = Math.round((100 * done) / total);
   const dock = $('dock');

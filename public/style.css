@@ -189,9 +189,9 @@ a:hover { color: var(--accent); }
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: none; }
 }
-.card, .tile, .banner, .fun, .spark, .comment { animation: rise 0.35s ease-out both; }
-.tile:nth-child(2), .fun:nth-child(2) { animation-delay: 0.05s; }
-.tile:nth-child(3), .fun:nth-child(3) { animation-delay: 0.1s; }
+.card, .tile, .banner, .spark, .comment { animation: rise 0.35s ease-out both; }
+.tile:nth-child(2) { animation-delay: 0.05s; }
+.tile:nth-child(3) { animation-delay: 0.1s; }
 .spark:nth-child(n+2) { animation-delay: 0.05s; }
 
 .reveal {
@@ -458,11 +458,6 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
 }
 .comment.urgent { border-left-color: var(--red); background: var(--red-bg); }
 
-.tokenlist {
-  font-family: ui-monospace, monospace; font-size: 12px;
-  background: #f9fafb; border: 1px dashed var(--baseline); border-radius: 8px;
-  padding: 12px; white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow: auto;
-}
 
 .viz-tip {
   position: fixed; pointer-events: none; z-index: 10;
@@ -489,8 +484,6 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
   100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
 }
 .pill.urgent-pill { background: var(--red-bg); border-color: #fecaca; color: var(--red); }
-
-.countrow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 4px 0 12px; }
 
 /* ---- invites page ---- */
 .card-head {
@@ -580,7 +573,6 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
 
 /* ---- team-facing pages (survey / summary / landing) ---- */
 .hero { text-align: center; padding: 34px 8px 24px; position: relative; }
-.hero .float { display: none; } /* decorative emoji retired with the formal theme */
 .hero-title {
   font-size: clamp(26px, 5vw, 36px);
   font-weight: 700; line-height: 1.2; margin: 0; letter-spacing: -0.015em;
@@ -667,41 +659,6 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
 .worthy .big .grad { color: var(--accent); }
 .worthy p { max-width: 480px; margin: 10px auto 0; color: var(--ink-2); font-size: 13.5px; }
 
-/* summary — the big 3 */
-.b3card {
-  display: flex; align-items: center; gap: 18px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-  border-left: 4px solid var(--accent);
-  padding: 18px 20px; margin: 10px 0;
-  box-shadow: var(--shadow);
-}
-.b3card:nth-of-type(2) { border-left-color: var(--amber); }
-.b3card:nth-of-type(3) { border-left-color: var(--good); }
-.b3card p { margin: 0; font-size: 15px; line-height: 1.6; color: var(--ink); }
-.b3num {
-  flex: none; width: 44px; height: 44px; border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 19px; font-weight: 700; color: #fff;
-  background: var(--navy);
-}
-@media (max-width: 540px) { .b3card { flex-direction: column; text-align: center; gap: 10px; } }
-
-.fun-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
-.fun {
-  background: var(--surface);
-  border: 1px solid var(--border); border-radius: 14px;
-  border-top: 3px solid var(--accent);
-  padding: 16px; text-align: center;
-  box-shadow: var(--shadow);
-}
-.fun:nth-child(2) { border-top-color: var(--amber); }
-.fun:nth-child(3) { border-top-color: var(--good); }
-.fun .emoji { font-size: 26px; display: inline-block; }
-.fun .label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-top: 8px; }
-.fun .value { font-weight: 600; font-size: 14px; margin-top: 4px; }
-
-/* confetti retired with the formal theme */
-.confetti-piece { display: none; }
 
 /* goal-card icon chips (SVG) */
 .goal .icon {
