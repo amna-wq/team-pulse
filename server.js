@@ -8,7 +8,15 @@ import { SLIDERS, BLOCKERS, PROCESSES, MOTIVATIONS, OPEN_TEXT_LABEL, sliderKeys,
 import { createPeerRouter } from './src/phase2-peer-feedback.js';
 import { sendInvites, mailConfigured, renderInviteEmail, baseUrl, gmailStatus, gmailExchangeCode, gmailDisconnect } from './src/mailer.js';
 import { fetchTeamEmails, teamSource, sageConfigured } from './src/team.js';
-import { queueSync, syncAll, restoreFromSheet, ensureSpreadsheet, sheetUrl, MIRRORED_TABLES } from './src/sheets.js';
+import { queueSync as queueSheetSync, syncAll, restoreFromSheet, ensureSpreadsheet, sheetUrl, MIRRORED_TABLES } from './src/sheets.js';
+import { queueLocalExport, writeLocalExport, EXPORT_DIR } from './src/localexport.js';
+
+// Every write goes to both homes: the Google Sheet (shareable, durable) and
+// the folder on this Mac (works with or without Google connected).
+function queueSync(...tables) {
+  queueSheetSync(...tables);
+  if (tables.includes('responses') || tables.includes('tokens')) queueLocalExport();
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 8080;
@@ -244,6 +252,10 @@ app.post('/api/survey/submit', (req, res) => {
     db.exec('ROLLBACK');
     throw e;
   }
+  // Both the response row and the now-used token need mirroring. Missing
+  // 'responses' here left new answers unsaved to the Sheet until the 5-minute
+  // safety net happened to run.
+  queueSync('responses', 'tokens');
   res.json({ ok: true });
 });
 
@@ -612,6 +624,11 @@ try {
   console.warn('[sheets] restore skipped:', e.message);
 }
 setInterval(() => queueSync(...MIRRORED_TABLES), 5 * 60 * 1000);
+
+// The local copy is written on every boot too, so it exists even if nothing
+// has been submitted since the app last started.
+const boot = writeLocalExport();
+if (boot) console.log(`[local-export] ${boot.months} month file(s) written to ${boot.dir}`);
 
 app.listen(PORT, () => {
   console.log(`Team Pulse listening on http://localhost:${PORT}${DEMO_MODE ? ' (DEMO MODE — fake data, window forced open)' : ''}`);
