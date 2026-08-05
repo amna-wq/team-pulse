@@ -1,6 +1,12 @@
 import { db } from './db.js';
+import { DEMO_MODE } from './cycle.js';
 import { accessToken, googleConnected, getSetting, setSetting } from './google.js';
 import { cycles, monthLabel, monthStats, detailRows, DETAIL_HEADERS, trendTable } from './monthly.js';
+
+// Demo instances never touch the Sheet — in either direction. Fake seeded
+// data must not leak into the shared spreadsheet, and a demo box must not
+// clobber or restore production data. (The local HTML export still works.)
+const mirrorEnabled = () => !DEMO_MODE;
 
 // Google Sheets mirror — the durable home of the data.
 //
@@ -254,7 +260,7 @@ async function syncMonthTabs(id) {
 const pending = new Set();
 let timer = null;
 export function queueSync(...tables) {
-  if (!googleConnected()) return;
+  if (!mirrorEnabled() || !googleConnected()) return;
   for (const t of tables) if (MIRRORED_TABLES.includes(t)) pending.add(t);
   clearTimeout(timer);
   timer = setTimeout(flush, 1500);
@@ -284,7 +290,7 @@ export async function syncAll() {
 // Cold-boot restore: only when the local database is completely empty, so a
 // live local DB is never clobbered by an older sheet.
 export async function restoreFromSheet() {
-  if (!googleConnected()) return false;
+  if (!mirrorEnabled() || !googleConnected()) return false;
   const localRows = MIRRORED_TABLES.reduce(
     (n, t) => n + db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n, 0
   );

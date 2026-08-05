@@ -1,0 +1,8 @@
+.env
+.env.*
+data/
+node_modules/
+*.db
+*.db-*
+*.log
+.git
