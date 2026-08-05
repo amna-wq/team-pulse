@@ -562,6 +562,36 @@ async function autoEmailTick() {
 setInterval(() => autoEmailTick().catch((e) => console.error('[auto-email]', e.message)), 10 * 60 * 1000);
 setTimeout(() => autoEmailTick().catch((e) => console.error('[auto-email]', e.message)), 5000);
 
+// Keep the roster current without anyone pressing a button: refresh it on
+// startup (and hourly), on top of the refresh right before each send.
+async function rosterRefresh() {
+  try {
+    syncTeamFromBQ(await fetchTeamEmails());
+    queueSync('recipients');
+  } catch (e) {
+    console.warn('[roster] refresh failed, keeping stored list:', e.message);
+  }
+}
+setTimeout(rosterRefresh, 3000);
+setInterval(rosterRefresh, 60 * 60 * 1000);
+
+// Scale-to-zero hosting (Cloud Run) parks the container between requests, so
+// the in-process timers above cannot be trusted to fire on the 27th. Cloud
+// Scheduler pings this endpoint instead; it does the same work, guarded by a
+// shared secret. Set CRON_SECRET to enable it.
+app.post('/api/cron/tick', async (req, res) => {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return res.status(404).json({ error: 'Cron endpoint is disabled (CRON_SECRET unset).' });
+  const given = String(req.get('X-Cron-Secret') || '');
+  if (given.length !== secret.length ||
+      !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(secret))) {
+    return res.status(401).json({ error: 'Bad cron secret.' });
+  }
+  await rosterRefresh();
+  await autoEmailTick();
+  res.json({ ok: true, ranAt: new Date().toISOString() });
+});
+
 // Phase 2 — peer feedback module, gated behind MANAGEMENT_SPONSORED.
 app.use('/api/peer-feedback', createPeerRouter({ requireAdmin }));
 

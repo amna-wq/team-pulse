@@ -32,12 +32,61 @@ async function init() {
 // score color: low reads red, middle amber, high green
 const scoreColor = (v) => (v <= 3 ? '#d6453d' : v <= 6 ? '#e0862f' : v <= 8 ? '#6aa63c' : '#2b8a3e');
 
-function paint(input, bubble) {
+// The word that appears next to the number as you drag — the slider should
+// feel like it's answering back, not just moving.
+const scoreWord = (v) =>
+  v <= 2 ? 'Really rough' : v <= 4 ? 'Not great' : v <= 6 ? 'So-so'
+  : v <= 8 ? 'Pretty good' : 'Excellent';
+
+function paint(input, bubble, verdict) {
   const v = Number(input.value);
+  const c = scoreColor(v);
   // Chip stays in the calm blue theme; the chip text carries the score color.
   input.style.setProperty('--pct', `${((v - 1) / 9) * 100}%`);
-  bubble.style.color = scoreColor(v);
+  input.style.setProperty('--sc', c);
+  bubble.style.color = c;
   bubble.textContent = v;
+  if (verdict) {
+    verdict.textContent = input.dataset.touched ? scoreWord(v) : 'Drag to answer';
+    verdict.style.color = input.dataset.touched ? c : '';
+    verdict.classList.toggle('untouched', !input.dataset.touched);
+  }
+}
+
+// ---- live progress: how much of the survey is actually answered ----
+// Sliders start at 5, so they only count once the person has moved (or
+// keyboard-adjusted) them — otherwise the meter would open at 60% for free.
+const REQUIRED = ['q_heard', 'q_equipped', 'q_workload', 'q_communication', 'q_meetings', 'q_safe'];
+
+function answeredCount() {
+  let done = 0;
+  for (const key of REQUIRED) if ($(key)?.dataset.touched) done++;
+  if ($('blocker').value) done++;
+  if ($('process').value) done++;
+  if ($('motivation').value) done++;
+  if ($('motivation_why').value.trim()) done++;
+  return done;
+}
+
+function updateProgress() {
+  const total = REQUIRED.length + 4;
+  const done = answeredCount();
+  const pct = Math.round((100 * done) / total);
+  const dock = $('dock');
+  const complete = done === total;
+  $('dock-fill').style.width = pct + '%';
+  $('dock-count').textContent = complete ? 'All answered — you can submit' : `${done} of ${total} answered`;
+  dock.classList.toggle('complete', complete);
+  const btn = $('submit-btn');
+  btn.textContent = complete ? 'SUBMIT' : `SUBMIT · ${total - done} left`;
+  btn.classList.toggle('ready', complete);
+  // Mark answered questions so the page shows its own state at a glance.
+  for (const [el, ok] of [
+    [$('blocker'), !!$('blocker').value],
+    [$('process'), !!$('process').value],
+    [$('motivation'), !!$('motivation').value],
+    [$('motivation_why'), !!$('motivation_why').value.trim()],
+  ]) el.classList.toggle('answered', ok);
 }
 
 function buildForm() {
@@ -51,16 +100,24 @@ function buildForm() {
         <input type="range" id="${s.key}" min="1" max="10" step="1" value="5">
         <div class="slider-val" id="${s.key}_val">5</div>
       </div>
-      <div class="range-ends"><span>1 · strongly disagree</span><span>10 · strongly agree</span></div>`;
+      <div class="range-ends">
+        <span>1 · strongly disagree</span>
+        <span class="slider-verdict untouched">Drag to answer</span>
+        <span>10 · strongly agree</span>
+      </div>`;
     wrap.appendChild(div);
     const input = div.querySelector('input');
     const bubble = div.querySelector('.slider-val');
-    paint(input, bubble);
+    const verdict = div.querySelector('.slider-verdict');
+    paint(input, bubble, verdict);
     input.addEventListener('input', () => {
-      paint(input, bubble);
+      input.dataset.touched = '1';
+      div.classList.add('answered');
+      paint(input, bubble, verdict);
       bubble.classList.remove('pop');
       void bubble.offsetWidth; // restart the pop animation
       bubble.classList.add('pop');
+      updateProgress();
     });
   }
   const fill = (sel, items, placeholder) => {
@@ -90,6 +147,25 @@ function buildForm() {
     $('upward').classList.toggle('hidden', !e.target.checked);
   });
 
+  // Anything that can change completeness re-renders the progress dock.
+  for (const id of ['blocker', 'process', 'motivation']) {
+    $(id).addEventListener('change', updateProgress);
+  }
+  $('motivation_why').addEventListener('input', updateProgress);
+
+  // The dock only makes sense once the questions are on screen.
+  const dock = $('dock');
+  const io = new IntersectionObserver(
+    ([e]) => dock.classList.toggle('on', e.isIntersecting || e.boundingClientRect.top < 0),
+    { threshold: 0 }
+  );
+  io.observe($('sliders'));
+  dock.addEventListener('click', () => {
+    const next = [...document.querySelectorAll('#survey .slider-q:not(.answered), #survey select:not(.answered)')][0];
+    (next || $('submit-btn')).scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+
+  updateProgress();
   $('survey').addEventListener('submit', submit);
 }
 

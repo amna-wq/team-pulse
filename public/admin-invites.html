@@ -35,18 +35,14 @@
       <h2 style="margin:0">Recipients <span class="hint" id="rcpt-count" style="display:inline"></span></h2>
       <div class="card-head-actions">
         <input type="search" id="rcpt-filter" class="filter-input" placeholder="Filter by name or role…" autocomplete="off">
-        <button class="secondary btn-sm" id="team-sync">Sync team</button>
       </div>
     </div>
     <div id="recipient-status"></div>
-    <p class="hint" id="team-sync-note" style="margin:12px 0 0"></p>
   </div>
 
   <!-- 3 — prove it works before the 27th -->
   <div class="card">
     <h2>Send a test invite</h2>
-    <p class="hint" style="margin-top:0">Sends one real invite to a single address so you can check how it lands.
-    This mints a working survey link — don't send it to a teammate before the window opens.</p>
     <div class="btnrow" style="margin-top:0">
       <input type="email" id="test-email" style="max-width:320px" placeholder="you@k-brands.com">
       <button class="secondary" id="email-test">Send test</button>

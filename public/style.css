@@ -257,17 +257,21 @@ input[type="range"]:focus-visible {
 input[type="range"]:focus-visible::-webkit-slider-thumb {
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.25);
 }
+/* the filled part of the track carries the score colour as you drag */
 input[type="range"]::-webkit-slider-runnable-track {
-  height: 6px; border-radius: 4px; background: var(--track);
+  height: 6px; border-radius: 4px;
+  background: linear-gradient(to right,
+    var(--sc, var(--accent)) 0 var(--pct, 50%), var(--track) var(--pct, 50%) 100%);
 }
+input[type="range"]::-moz-range-progress { height: 6px; border-radius: 4px; background: var(--sc, var(--accent)); }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 20px; height: 20px; margin-top: -7px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--sc, var(--accent));
   border: 3px solid #fff;
   box-shadow: 0 1px 4px rgba(17, 24, 39, 0.3);
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease, background 0.2s ease;
 }
 input[type="range"]:active::-webkit-slider-thumb,
 input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.1); }
@@ -287,7 +291,7 @@ input[type="range"]::-moz-range-thumb {
 }
 .slider-val.pop { animation: pop 0.25s ease-out; }
 @keyframes pop { 50% { transform: scale(1.12); } }
-.range-ends { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+.range-ends { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 11.5px; color: var(--muted); margin-top: 6px; }
 
 select, textarea, input[type="text"], input[type="password"], input[type="number"], input[type="email"] {
   width: 100%; font: inherit; color: var(--ink);
@@ -716,6 +720,68 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
 /* prominent submit */
 .submit-row { justify-content: center; }
 .submit-row button { padding: 12px 40px; letter-spacing: 0.08em; }
+
+/* ---- live survey interactivity ---- */
+.slider-verdict {
+  font-weight: 700; font-size: 12px;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+.slider-verdict.untouched { color: var(--muted); font-weight: 500; opacity: 0.85; }
+
+/* a question that's been answered says so, quietly */
+.slider-q { position: relative; transition: background 0.25s ease; }
+.slider-q::before {
+  content: "✓";
+  position: absolute; top: 14px; right: 0;
+  font-size: 12px; font-weight: 700; color: var(--good);
+  opacity: 0; transform: scale(0.6);
+  transition: opacity 0.25s ease, transform 0.25s var(--spring);
+}
+.slider-q.answered::before { opacity: 1; transform: scale(1); }
+select.answered { border-color: #b9dcc4; background-color: #fbfffc; }
+textarea.answered { border-color: #b9dcc4; }
+
+/* progress dock — always tells you how far in you are */
+.dock {
+  position: fixed; left: 50%; bottom: 20px; z-index: 50;
+  transform: translate(-50%, 24px);
+  display: flex; flex-direction: column; gap: 7px;
+  min-width: 230px; padding: 11px 18px 13px;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 14px; cursor: pointer;
+  box-shadow: 0 14px 40px rgba(30, 58, 138, 0.18), 0 2px 8px rgba(30, 58, 138, 0.08);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.35s ease, transform 0.35s var(--spring);
+}
+.dock.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.dock:hover { transform: translate(-50%, -3px); }
+.dock-count {
+  font-size: 12.5px; font-weight: 700; color: var(--ink-2);
+  text-align: center; letter-spacing: -0.005em;
+}
+.dock-bar { height: 5px; border-radius: 99px; background: var(--track); overflow: hidden; }
+.dock-fill {
+  display: block; height: 100%; width: 0;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent));
+  transition: width 0.45s var(--spring);
+}
+.dock.complete { border-color: #bbf7d0; background: rgba(240, 253, 244, 0.92); }
+.dock.complete .dock-count { color: var(--good); }
+.dock.complete .dock-fill { background: linear-gradient(90deg, #4ade80, var(--good)); }
+@media (max-width: 520px) { .dock { left: 12px; right: 12px; transform: translateY(24px); min-width: 0; }
+  .dock.on { transform: none; } .dock:hover { transform: translateY(-3px); } }
+
+/* submit button reflects readiness */
+#submit-btn { transition: background 0.2s ease, box-shadow 0.25s ease, transform 0.1s ease; }
+#submit-btn.ready {
+  background: var(--good);
+  box-shadow: 0 8px 24px rgba(22, 163, 74, 0.35);
+}
+#submit-btn.ready:hover { background: #15803d; }
 
 /* ---- submit send-off: the moment between the form and the thank-you page ---- */
 .sendoff {

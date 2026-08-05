@@ -17,7 +17,6 @@ async function init() {
   if (meta.demoMode) $('demo-banner').classList.remove('hidden');
   const { admin } = await api('/api/admin/session');
   if (!admin) { location.href = '/admin'; return; }
-  $('team-sync').addEventListener('click', syncTeam);
   $('email-test').addEventListener('click', sendTestEmail);
   $('email-preview').addEventListener('click', () => window.open('/admin/email-preview', '_blank'));
   $('rcpt-filter').addEventListener('input', renderRecipients);
@@ -30,7 +29,6 @@ async function render() {
   renderSetup();
   renderTiles();
   renderRecipients();
-  renderSyncNote();
 }
 
 // ---- delivery setup: how sending is wired up ----
@@ -140,7 +138,7 @@ function renderRecipients() {
 
   if (!all.length) {
     $('recipient-status').innerHTML =
-      '<p class="hint">No team loaded yet — hit <strong>Sync from Sage HR</strong> to pull the directory.</p>';
+      '<p class="hint">No team loaded yet — the roster syncs itself on startup and before every monthly send.</p>';
     return;
   }
   if (!list.length) {
@@ -177,39 +175,6 @@ function renderRecipients() {
       }).join('')}</tbody>
     </table></div>` +
     (failed ? `<div class="banner err" style="margin-bottom:0">${failed} invite${failed > 1 ? 's' : ''} failed to send — hover a “Failed” chip for the reason.</div>` : '');
-}
-
-function renderSyncNote() {
-  const d = data;
-  const when = d.teamSyncedAt ? ` Last synced ${new Date(d.teamSyncedAt).toLocaleString()}.` : '';
-  const note = $('team-sync-note');
-  if (d.sageConfigured) {
-    note.innerHTML = `Names and addresses come live from the <strong>Sage HR</strong> employee directory,
-      and refresh on every sync and before each monthly send.${esc(when)}`;
-  } else if (d.teamSource === 'manual') {
-    note.innerHTML = `Names, roles and addresses come from the confirmed roster in <code>.env</code>.
-      Editing that list and hitting Sync updates this table; anyone removed there stops receiving invites.${esc(when)}`;
-  } else {
-    note.innerHTML = `<span class="warn-note">No roster configured</span> — falling back to the BigQuery
-      table, with names derived from each address.${esc(when)}`;
-  }
-}
-
-async function syncTeam() {
-  const btn = $('team-sync');
-  const label = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Syncing…';
-  try {
-    const { count, source } = await api('/api/admin/recipients-sync', { method: 'POST' });
-    emailMsg(`Synced ${count} people from ${source === 'sagehr' ? 'Sage HR' : 'the fallback list'}.`);
-    await render();
-  } catch (e) {
-    emailMsg(e.message, true);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = label;
-  }
 }
 
 // ---- google connect / disconnect ----

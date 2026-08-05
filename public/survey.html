@@ -138,6 +138,12 @@
     <p class="hint" style="text-align:center">One response per person per month. Answers are final: once submitted, nobody can view or edit them, including you.</p>
   </form>
 
+  <!-- live progress dock — click to jump to the next unanswered question -->
+  <div id="dock" class="dock" role="status" aria-live="polite" title="Jump to the next unanswered question">
+    <span id="dock-count" class="dock-count">0 answered</span>
+    <span class="dock-bar"><span id="dock-fill" class="dock-fill"></span></span>
+  </div>
+
   <footer>Team Pulse · anonymous by design</footer>
 </main>
 <script src="/reveal.js"></script>
