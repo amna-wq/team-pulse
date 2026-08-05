@@ -181,6 +181,7 @@ a:hover { color: var(--accent); }
   box-shadow: 0 6px 18px rgba(37, 99, 235, 0.45);
 }
 .btn-head svg { flex: none; }
+.head-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 640px) { .admin-head { flex-direction: column; align-items: flex-start; } }
 
 /* ---- motion: subtle, professional ---- */

@@ -9,7 +9,7 @@ import { createPeerRouter } from './src/phase2-peer-feedback.js';
 import { sendInvites, mailConfigured, renderInviteEmail, baseUrl, gmailStatus, gmailExchangeCode, gmailDisconnect } from './src/mailer.js';
 import { fetchTeamEmails, teamSource, sageConfigured } from './src/team.js';
 import { queueSync as queueSheetSync, syncAll, restoreFromSheet, ensureSpreadsheet, sheetUrl, MIRRORED_TABLES } from './src/sheets.js';
-import { queueLocalExport, writeLocalExport, EXPORT_DIR } from './src/localexport.js';
+import { queueLocalExport, writeLocalExport, dashboardHtml, EXPORT_DIR } from './src/localexport.js';
 
 // Every write goes to both homes: the Google Sheet (shareable, durable) and
 // the folder on this Mac (works with or without Google connected).
@@ -614,6 +614,14 @@ app.get('/p/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 app.get('/thanks', (req, res) => res.sendFile(path.join(__dirname, 'public', 'thanks.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 app.get('/admin/invites', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin-invites.html')));
+
+// The full multi-month report, rendered live from the database — the same page
+// that gets written to the Mac, served inside the admin. It's a page, not an
+// API, so an unauthenticated hit goes to the sign-in screen rather than a 401.
+app.get('/admin/report', (req, res) => {
+  if (!isAdmin(req)) return res.redirect('/admin');
+  res.type('html').send(dashboardHtml({ inApp: true }));
+});
 
 // Data mirror: on a cold boot with an empty local DB (ephemeral hosting),
 // restore everything from the Google Sheet before serving. A safety-net

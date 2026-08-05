@@ -56,7 +56,9 @@ function lineChart(trend) {
   return `<svg viewBox="0 0 ${W} ${H}" class="line">${grid}${series}${xlab}</svg><div class="legend">${legend}</div>`;
 }
 
-function dashboardHtml() {
+// `inApp` renders the same report for the admin route: a back link instead of
+// the "copy on this Mac" framing. The charts and data are identical.
+export function dashboardHtml({ inApp = false } = {}) {
   const list = cycles();
   const trend = trendTable();
   const sections = list.map((c) => {
@@ -89,15 +91,18 @@ function dashboardHtml() {
 
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Team Pulse — data on this Mac</title>
+<title>Team Pulse — full report</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
 <style>
   :root{--ink:#111827;--ink2:#4b5563;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb}
   *{box-sizing:border-box}
   body{margin:0;background:#f4f8fd;color:var(--ink);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
   main{max-width:1000px;margin:0 auto;padding:28px 18px 70px}
-  header.top{background:#10141f;border-bottom:3px solid #dc2626;border-radius:10px;padding:20px 24px;margin-bottom:18px}
+  header.top{background:#10141f;border-bottom:3px solid #dc2626;border-radius:10px;padding:20px 24px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:16px}
   header.top h1{color:#fff;margin:0;font-size:22px}
   header.top p{color:#9ca3af;margin:5px 0 0;font-size:13px}
+  header.top .back{flex:none;color:#fff;text-decoration:none;font-size:13.5px;font-weight:600;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.22);border-radius:8px;padding:9px 16px;transition:background .15s,border-color .15s}
+  header.top .back:hover{background:#2563eb;border-color:#2563eb}
   .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px;margin:18px 0;box-shadow:0 1px 3px rgba(17,24,39,.07)}
   h2{font-size:18px;margin:0 0 14px}
   h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:22px 0 8px}
@@ -127,8 +132,13 @@ function dashboardHtml() {
   footer{color:var(--muted);font-size:12px;text-align:center;margin-top:24px}
 </style></head><body><main>
 <header class="top">
-  <h1>Team Pulse — the copy on this Mac</h1>
-  <p>Written automatically by the app. Anonymous by design: no names, no timestamps, nothing traceable to a person.</p>
+  <div>
+    <h1>Team Pulse — full report</h1>
+    <p>${inApp
+      ? 'Every month since the first pulse. Anonymous by design: no names, no timestamps, nothing traceable to a person.'
+      : 'The copy on this Mac, written automatically by the app. Anonymous by design: no names, no timestamps, nothing traceable to a person.'}</p>
+  </div>
+  ${inApp ? '<a class="back" href="/admin">&#8249; Dashboard</a>' : ''}
 </header>
 <section class="card"><h2>Trend across every month</h2>${lineChart(trend)}</section>
 ${sections || '<section class="card"><p class="muted">No responses recorded yet.</p></section>'}
