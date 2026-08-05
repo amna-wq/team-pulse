@@ -215,26 +215,44 @@ async function submit(e) {
   }
 
   $('submit-btn').disabled = true;
-  const res = await fetch('/api/survey/submit', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  // Cover the form the moment they click — the request itself takes time, and
+  // seeing the form sit there afterwards makes the submit feel broken.
+  const overlay = showSendOff();
+
+  let res;
+  try {
+    res = await fetch('/api/survey/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    overlay?.remove();
+    err.textContent = 'Could not reach the server. Check your connection and try again.';
+    err.classList.remove('hidden');
+    $('submit-btn').disabled = false;
+    return;
+  }
+
   if (res.ok) {
-    playSendOff();
+    if (!overlay) return void (window.location.href = '/thanks');
+    overlay.classList.add('done'); // ring completes, tick draws, text rises
+    setTimeout(() => { window.location.href = '/thanks'; }, 1500);
   } else {
+    overlay?.remove();
     const data = await res.json().catch(() => ({}));
     err.textContent = data.error || 'Something went wrong. Please try again.';
     err.classList.remove('hidden');
+    err.scrollIntoView({ block: 'center', behavior: 'smooth' });
     $('submit-btn').disabled = false;
   }
 }
 
 // A short "sealed and sent, anonymously" moment, then the thank-you page.
 // Deliberately minimal: one ring, one checkmark, two lines of text.
-function playSendOff() {
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduced) return void (window.location.href = '/thanks');
+// Returns the overlay so the caller can complete it (.done) or drop it on error.
+function showSendOff() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return null;
 
   const o = document.createElement('div');
   o.className = 'sendoff';
@@ -249,9 +267,9 @@ function playSendOff() {
       <div class="sendoff-sub">Your answers are in — with nothing attached to your name.</div>
     </div>`;
   document.body.appendChild(o);
-  requestAnimationFrame(() => o.classList.add('on'));
-  setTimeout(() => o.classList.add('leaving'), 1850);
-  setTimeout(() => { window.location.href = '/thanks'; }, 2250);
+  // It is opaque from the first frame and stays that way right up to the
+  // navigation — fading either way would reveal the form behind it.
+  return o;
 }
 
 init();

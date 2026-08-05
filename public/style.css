@@ -790,10 +790,10 @@ textarea.answered { border-color: #b9dcc4; }
   background: rgba(244, 248, 253, 0.86);
   backdrop-filter: blur(14px) saturate(1.3);
   -webkit-backdrop-filter: blur(14px) saturate(1.3);
-  opacity: 0; transition: opacity 0.32s ease;
+  /* No fade-in: it covers on the very first frame after the click, so the
+     form is never visible behind a half-transparent overlay. */
+  opacity: 1;
 }
-.sendoff.on { opacity: 1; }
-.sendoff.leaving { opacity: 0; transition: opacity 0.4s ease; }
 .sendoff-inner { text-align: center; padding: 24px; }
 .sendoff-mark { width: 78px; height: 78px; display: block; margin: 0 auto 20px; overflow: visible; }
 .so-ring {
@@ -802,20 +802,33 @@ textarea.answered { border-color: #b9dcc4; }
   transform: rotate(-90deg); transform-origin: 50% 50%;
 }
 .so-tick { stroke: var(--good); stroke-dasharray: 40; stroke-dashoffset: 40; }
-.sendoff.on .so-ring { animation: soRing 0.62s cubic-bezier(0.5, 0, 0.2, 1) 0.06s forwards; }
-.sendoff.on .so-tick { animation: soTick 0.4s cubic-bezier(0.5, 0, 0.2, 1) 0.6s forwards; }
-.sendoff.on .sendoff-mark { animation: soPop 0.4s var(--spring) 0.86s both; }
+/* while the response is in flight the ring spins — an honest "working" state */
+.sendoff .so-ring {
+  stroke-dasharray: 40 105;
+  animation: soSpin 0.9s linear infinite;
+}
+/* response is in: ring closes, tick draws, words rise */
+.sendoff.done .so-ring {
+  animation: none;
+  stroke-dasharray: 145; stroke-dashoffset: 145;
+  animation: soRing 0.45s cubic-bezier(0.5, 0, 0.2, 1) forwards;
+}
+.sendoff.done .so-tick { animation: soTick 0.36s cubic-bezier(0.5, 0, 0.2, 1) 0.36s forwards; }
+.sendoff.done .sendoff-mark { animation: soPop 0.4s var(--spring) 0.58s both; }
+@keyframes soSpin { to { transform: rotate(270deg); } }
 @keyframes soRing { to { stroke-dashoffset: 0; } }
 @keyframes soTick { to { stroke-dashoffset: 0; } }
 @keyframes soPop { 40% { transform: scale(1.09); } to { transform: scale(1); } }
 .sendoff-title {
   font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
-  opacity: 0; animation: soUp 0.5s ease-out 0.82s both;
+  opacity: 0;
 }
 .sendoff-sub {
   font-size: 14px; color: var(--ink-2); margin-top: 6px;
-  opacity: 0; animation: soUp 0.5s ease-out 0.96s both;
+  opacity: 0;
 }
+.sendoff.done .sendoff-title { animation: soUp 0.45s ease-out 0.5s both; }
+.sendoff.done .sendoff-sub { animation: soUp 0.45s ease-out 0.62s both; }
 @keyframes soUp { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
 
 /* ---- thank-you page ---- */
