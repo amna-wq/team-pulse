@@ -53,16 +53,6 @@ for (const sql of [
   try { db.exec(sql); } catch { /* column exists */ }
 }
 
-// ONE-TIME data correction (2026-08-27, remove after this cycle): the author
-// of this response asked for its removal — they had accidentally pasted
-// AI-assistant text into the motivation box. Matched on the pasted prefix,
-// which no genuine answer contains (verified: exactly one row). Deliberately
-// a hardcoded one-off, NOT an API: responses stay undeletable by design.
-try {
-  db.prepare(
-    "DELETE FROM responses WHERE cycle = '2026-08' AND motivation_why LIKE 'Almost! A more natural version:%'"
-  ).run();
-} catch { /* table absent on first boot */ }
 
 const app = express();
 app.use(express.json({ limit: '64kb' }));
@@ -677,6 +667,23 @@ try {
 } catch (e) {
   console.warn('[sheets] restore skipped:', e.message);
 }
+
+// ONE-TIME data correction (2026-08-27, remove after this cycle): the author
+// of this response asked for its removal — they had accidentally pasted
+// AI-assistant text into the motivation box. Matched on the pasted prefix,
+// which no genuine answer contains (verified: exactly one row). Runs AFTER
+// the Sheet restore (which would otherwise re-import it) and re-mirrors, so
+// the row disappears from both homes. Deliberately a hardcoded one-off, NOT
+// an API: responses stay undeletable by design.
+try {
+  const gone = db.prepare(
+    "DELETE FROM responses WHERE cycle = '2026-08' AND motivation_why LIKE 'Almost! A more natural version:%'"
+  ).run().changes;
+  if (gone) {
+    queueSync('responses');
+    console.log(`[correction] removed ${gone} withdrawn response`);
+  }
+} catch (e) { console.warn('[correction]', e.message); }
 setInterval(() => queueSync(...MIRRORED_TABLES), 5 * 60 * 1000);
 
 // The local copy is written on every boot too, so it exists even if nothing
