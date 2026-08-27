@@ -8,7 +8,7 @@ import { SLIDERS, BLOCKERS, PROCESSES, MOTIVATIONS, OPEN_TEXT_LABEL, sliderKeys,
 import { createPeerRouter } from './src/phase2-peer-feedback.js';
 import { sendInvites, mailConfigured, renderInviteEmail, baseUrl, gmailStatus, gmailExchangeCode, gmailDisconnect } from './src/mailer.js';
 import { fetchTeamEmails, teamSource, sageConfigured } from './src/team.js';
-import { queueSync as queueSheetSync, syncAll, restoreFromSheet, ensureSpreadsheet, sheetUrl, MIRRORED_TABLES } from './src/sheets.js';
+import { queueSync as queueSheetSync, syncAll, flush, restoreFromSheet, ensureSpreadsheet, sheetUrl, MIRRORED_TABLES } from './src/sheets.js';
 import { queueLocalExport, writeLocalExport, dashboardHtml, EXPORT_DIR } from './src/localexport.js';
 
 // Every write goes to both homes: the Google Sheet (shareable, durable) and
@@ -529,29 +529,75 @@ app.get('/admin/email-preview', (req, res) => {
 // Auto-send: when the monthly window opens, invites go out once per cycle.
 // Requires AUTO_EMAIL=true + a connected email (Gmail or SMTP); never runs in
 // demo mode (the demo window is always "open" and would spam the roster).
+//
+// POSTMORTEM 2026-08-27 — the team received up to 3 copies of the first real
+// invite. Two stacked bugs, both fixed below; do not simplify these away:
+//  (a) the boot timer and the cron endpoint ran this function CONCURRENTLY,
+//      and both passed the "already sent?" check before either recorded the
+//      send → in-process lock + the INSERT-first atomic claim;
+//  (b) the sent-record only reached the Sheet on a lazy debounce, and the
+//      container was reaped before it flushed, so the next cold start
+//      restored "never sent" and sent again → the claim is flushed to the
+//      Sheet BEFORE any email goes out, and per-recipient last_sent_at
+//      stamps cap the blast radius of any future failure to one copy each.
+let emailTickBusy = false;
 async function autoEmailTick() {
   if (process.env.AUTO_EMAIL !== 'true' || DEMO_MODE || !mailConfigured()) return;
-  const win = windowState();
-  if (!win.open) return;
-  if (db.prepare('SELECT 1 FROM email_log WHERE cycle = ?').get(win.cycle)) return;
-  // Freshen the roster right before sending, so joiners/leavers are always
-  // up to date. If the source is unreachable, fall back to the stored list.
+  if (emailTickBusy) return;
+  emailTickBusy = true;
   try {
-    syncTeamRoster(await fetchTeamEmails());
-  } catch (e) {
-    console.warn('[auto-email] roster sync failed, using stored list:', e.message);
+    const win = windowState();
+    if (!win.open) return;
+
+    // Atomically claim this cycle. Exactly one invocation ever wins the
+    // INSERT; everyone else sees changes === 0 and may only top up people
+    // who verifiably never got their copy.
+    const claimed = db.prepare(
+      'INSERT OR IGNORE INTO email_log (cycle, sent_at, sent_count) VALUES (?, ?, 0)'
+    ).run(win.cycle, new Date().toISOString()).changes > 0;
+
+    const opensIso = new Date(win.opens).toISOString();
+    const pendingEmails = () => db.prepare(
+      'SELECT email FROM recipients WHERE last_sent_at IS NULL OR last_sent_at < ?'
+    ).all(opensIso).map((r) => r.email);
+
+    if (!claimed && !pendingEmails().length) return;
+
+    // Make the claim durable BEFORE emailing: a cold boot restoring the
+    // Sheet must see it, or it would send the whole roster again.
+    queueSync('email_log');
+    await flush();
+
+    if (claimed) {
+      // Freshen the roster right before the send, so joiners/leavers are
+      // up to date. If the source is unreachable, use the stored list.
+      try {
+        syncTeamRoster(await fetchTeamEmails());
+      } catch (e) {
+        console.warn('[auto-email] roster sync failed, using stored list:', e.message);
+      }
+    }
+
+    const emails = pendingEmails();
+    if (!emails.length) return;
+    const result = await sendInvites(emails);
+    recordSendResults(result.results);
+    db.prepare('UPDATE email_log SET sent_count = sent_count + ? WHERE cycle = ?')
+      .run(result.sent, win.cycle);
+    queueSync('tokens', 'email_log', 'recipients');
+    await flush(); // durable before the cron request returns and the instance can be reaped
+    console.log(`[auto-email] ${win.cycle}: sent ${result.sent} invites${result.failed.length ? `, ${result.failed.length} failed` : ''}`);
+  } finally {
+    emailTickBusy = false;
   }
-  const emails = db.prepare('SELECT email FROM recipients').all().map((r) => r.email);
-  if (!emails.length) return;
-  const result = await sendInvites(emails);
-  recordSendResults(result.results);
-  db.prepare('INSERT INTO email_log (cycle, sent_at, sent_count) VALUES (?, ?, ?)')
-    .run(win.cycle, new Date().toISOString(), result.sent);
-  queueSync('tokens', 'email_log', 'recipients');
-  console.log(`[auto-email] ${win.cycle}: sent ${result.sent} invites${result.failed.length ? `, ${result.failed.length} failed` : ''}`);
 }
-setInterval(() => autoEmailTick().catch((e) => console.error('[auto-email]', e.message)), 10 * 60 * 1000);
-setTimeout(() => autoEmailTick().catch((e) => console.error('[auto-email]', e.message)), 5000);
+// On a cron-managed host (Cloud Run + Cloud Scheduler) the endpoint is the
+// ONLY trigger — internal timers on a scale-to-zero host are exactly what
+// caused the triple-send. Self-hosted (no CRON_SECRET) keeps the timers.
+if (!process.env.CRON_SECRET) {
+  setInterval(() => autoEmailTick().catch((e) => console.error('[auto-email]', e.message)), 10 * 60 * 1000);
+  setTimeout(() => autoEmailTick().catch((e) => console.error('[auto-email]', e.message)), 5000);
+}
 
 // Keep the roster current without anyone pressing a button: refresh it on
 // startup (and hourly), on top of the refresh right before each send.
