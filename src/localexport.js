@@ -124,10 +124,14 @@ export function dashboardHtml({ inApp = false } = {}) {
   .key i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
   details{margin-top:18px}
   summary{cursor:pointer;font-weight:600;font-size:13.5px;color:var(--accent)}
-  .tablewrap{overflow:auto;max-height:460px;border:1px solid var(--line);border-radius:8px;margin-top:10px}
-  table{border-collapse:collapse;font-size:12.5px;white-space:nowrap}
-  th{position:sticky;top:0;background:#f9fafb;text-align:left;padding:8px 10px;border-bottom:2px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
-  td{padding:7px 10px;border-bottom:1px solid var(--line);max-width:280px;overflow:hidden;text-overflow:ellipsis}
+  .tablewrap{overflow:auto;max-height:560px;border:1px solid var(--line);border-radius:8px;margin-top:10px}
+  table{border-collapse:collapse;font-size:12.5px}
+  th{position:sticky;top:0;background:#f9fafb;text-align:left;padding:8px 10px;border-bottom:2px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);white-space:nowrap}
+  /* Full text, always: comments wrap onto as many lines as they need —
+     nothing is ever trimmed to "…". Wide columns get a floor so slider
+     numbers stay compact while text stays readable. */
+  td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;white-space:pre-wrap;overflow-wrap:break-word;min-width:44px;max-width:420px}
+  td:has(+ td:last-child), td:nth-child(n+8){min-width:180px}
   .muted{color:var(--muted);font-size:13px}
   footer{color:var(--muted);font-size:12px;text-align:center;margin-top:24px}
 </style></head><body><main>
