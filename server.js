@@ -53,6 +53,17 @@ for (const sql of [
   try { db.exec(sql); } catch { /* column exists */ }
 }
 
+// ONE-TIME data correction (2026-08-27, remove after this cycle): the author
+// of this response asked for its removal — they had accidentally pasted
+// AI-assistant text into the motivation box. Matched on the pasted prefix,
+// which no genuine answer contains (verified: exactly one row). Deliberately
+// a hardcoded one-off, NOT an API: responses stay undeletable by design.
+try {
+  db.prepare(
+    "DELETE FROM responses WHERE cycle = '2026-08' AND motivation_why LIKE 'Almost! A more natural version:%'"
+  ).run();
+} catch { /* table absent on first boot */ }
+
 const app = express();
 app.use(express.json({ limit: '64kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
