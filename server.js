@@ -669,19 +669,31 @@ try {
 }
 
 // ONE-TIME data correction (2026-08-27, remove after this cycle): the author
-// of this response asked for its removal — they had accidentally pasted
-// AI-assistant text into the motivation box. Matched on the pasted prefix,
-// which no genuine answer contains (verified: exactly one row). Runs AFTER
-// the Sheet restore (which would otherwise re-import it) and re-mirrors, so
-// the row disappears from both homes. Deliberately a hardcoded one-off, NOT
-// an API: responses stay undeletable by design.
+// of one response had accidentally pasted an AI-assistant preamble into the
+// motivation box and asked for just that prefix to be removed. An earlier
+// revision of this correction deleted the whole row; this one strips the
+// prefix if present, and re-inserts the response (cleaned, otherwise exactly
+// as submitted) if the delete already ran. Idempotent across boots; runs
+// AFTER the Sheet restore and re-mirrors. Deliberately a hardcoded one-off,
+// NOT an API: responses stay unedited and undeletable by design.
 try {
-  const gone = db.prepare(
-    "DELETE FROM responses WHERE cycle = '2026-08' AND motivation_why LIKE 'Almost! A more natural version:%'"
-  ).run().changes;
-  if (gone) {
+  const CLEAN = 'my automation stuff! i love automating things and keeping everything as easy and simple as possible';
+  const stripped = db.prepare(
+    "UPDATE responses SET motivation_why = ? WHERE cycle = '2026-08' AND motivation_why LIKE 'Almost! A more natural version:%'"
+  ).run(CLEAN).changes;
+  let restored = 0;
+  if (!db.prepare("SELECT 1 FROM responses WHERE cycle = '2026-08' AND motivation_why = ?").get(CLEAN)) {
+    db.prepare(
+      `INSERT INTO responses (cycle, q_heard, q_equipped, q_workload, q_communication, q_meetings, q_safe,
+         blocker, process_improvement, open_text, upward_start, upward_stop, upward_continue,
+         concern, concern_urgent, motivation, motivation_why, blocker_other, process_other)
+       VALUES ('2026-08', 10, 10, 10, 3, 7, 10, 'waiting_on_others', 'handoffs', 'no', '', '', '', 'no', 0, 'work', ?, '', '')`
+    ).run(CLEAN);
+    restored = 1;
+  }
+  if (stripped || restored) {
     queueSync('responses');
-    console.log(`[correction] removed ${gone} withdrawn response`);
+    console.log(`[correction] motivation text cleaned (stripped ${stripped}, restored ${restored})`);
   }
 } catch (e) { console.warn('[correction]', e.message); }
 setInterval(() => queueSync(...MIRRORED_TABLES), 5 * 60 * 1000);
