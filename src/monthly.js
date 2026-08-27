@@ -83,13 +83,17 @@ export function monthStats(cycle) {
   const tok = db
     .prepare('SELECT COUNT(*) AS issued, COALESCE(SUM(used),0) AS used FROM tokens WHERE cycle = ?')
     .get(cycle) || { issued: 0, used: 0 };
+  // "Invited" counts PEOPLE (the roster), not links — resends and test links
+  // must not inflate it. For past cycles this uses today's roster, which is
+  // the closest honest number the schema can give.
+  const team = db.prepare('SELECT COUNT(*) AS n FROM recipients').get().n || tok.issued;
 
   return {
     cycle,
     label: monthLabel(cycle),
     responses: n,
-    invited: tok.issued,
-    participation: tok.issued ? Math.round((100 * tok.used) / tok.issued) : 0,
+    invited: team,
+    participation: team ? Math.min(100, Math.round((100 * tok.used) / team)) : 0,
     averages: SLIDERS.map((s) => ({ label: s.label, avg: Number(avg(s.key).toFixed(2)) })),
     blockers: tally('blocker', BLOCKERS),
     processes: tally('process_improvement', PROCESSES),

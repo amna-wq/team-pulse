@@ -108,7 +108,9 @@ function renderHeader() {
 
 function renderTiles() {
   const t = data.tokens;
-  const pct = t.issued ? Math.round((100 * t.used) / t.issued) : null;
+  // People, not links: extra links (resends/tests) never inflate the team size.
+  const team = data.teamSize || t.issued;
+  const pct = team ? Math.min(100, Math.round((100 * t.used) / team)) : null;
   const respColor = data.count >= data.minResponsesToShow ? '#2b8a3e' : '#e0862f';
   const partColor = pct == null ? 'var(--ink)' : pctColor(pct);
   $('tiles').innerHTML = `
@@ -116,8 +118,8 @@ function renderTiles() {
       <div class="value" style="color:${respColor}" data-count="${data.count}">0</div>
       <div class="note">shown only when ≥ ${data.minResponsesToShow} (anonymity floor)</div></div>
     <div class="tile" style="border-top-color:${pct == null ? 'var(--navy-2)' : partColor}"><div class="label">Participation</div>
-      <div class="value" style="color:${partColor}"><span data-count="${t.used}">0</span><span style="font-size:16px;color:var(--muted)"> / ${t.issued}</span></div>
-      <div class="note">${pct == null ? 'no links sent yet' : `<span style="color:${partColor};font-weight:600">${pct}% submitted</span> · ${t.opened} opened their link`}</div></div>
+      <div class="value" style="color:${partColor}"><span data-count="${t.used}">0</span><span style="font-size:16px;color:var(--muted)"> / ${team} people</span></div>
+      <div class="note">${!t.issued ? 'no links sent yet' : `<span style="color:${partColor};font-weight:600">${pct}% of the team submitted</span>`}</div></div>
     <div class="tile" style="border-top-color:var(--navy-2)"><div class="label">Months of data</div>
       <div class="value" data-count="${data.cycles.length}">0</div>
       <div class="note">trend history</div></div>`;

@@ -81,8 +81,11 @@ function renderSetup() {
 
 function renderTiles() {
   const c = data.counts;
-  const openPct = c.issued ? Math.round((100 * c.opened) / c.issued) : 0;
-  const usedPct = c.issued ? Math.round((100 * c.used) / c.issued) : 0;
+  // Percentages are of PEOPLE (roster), not of links — duplicates/tests
+  // would otherwise skew them.
+  const team = data.recipients.length || c.issued;
+  const openPct = team ? Math.min(100, Math.round((100 * c.opened) / team)) : 0;
+  const usedPct = team ? Math.min(100, Math.round((100 * c.used) / team)) : 0;
   const pctColor = (p) => (p >= 70 ? '#2b8a3e' : p >= 40 ? '#e0862f' : '#d6453d');
   // Tokens can exist without an email_log row (seeded demo data, manual mints),
   // so never claim "nothing sent" while links are outstanding.
@@ -99,11 +102,11 @@ function renderTiles() {
     <div class="tile" style="border-top-color:${c.issued ? pctColor(openPct) : 'var(--baseline)'}">
       <div class="label">Opened</div>
       <div class="value" style="color:${c.issued ? pctColor(openPct) : 'var(--ink)'}" data-count="${c.opened}">0</div>
-      <div class="note">${c.issued ? openPct + '% of links opened' : 'waiting on the first send'}</div></div>
+      <div class="note">${c.issued ? openPct + '% of the team' : 'waiting on the first send'}</div></div>
     <div class="tile" style="border-top-color:${c.issued ? pctColor(usedPct) : 'var(--baseline)'}">
       <div class="label">Submitted</div>
       <div class="value" style="color:${c.issued ? pctColor(usedPct) : 'var(--ink)'}" data-count="${c.used}">0</div>
-      <div class="note">${c.issued ? usedPct + '% completed the survey' : '—'}</div></div>`;
+      <div class="note">${c.issued ? usedPct + '% of the team completed the survey' : '—'}</div></div>`;
 
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   for (const el of document.querySelectorAll('#invite-tiles [data-count]')) {

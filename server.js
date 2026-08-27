@@ -312,6 +312,9 @@ app.get('/api/admin/overview', requireAdmin, (req, res) => {
   const tokens = db
     .prepare('SELECT COUNT(*) AS issued, COALESCE(SUM(used), 0) AS used, COALESCE(SUM(opened), 0) AS opened FROM tokens WHERE cycle = ?')
     .get(cycle);
+  // Participation denominators use PEOPLE, not links — duplicate/extra links
+  // (resends, tests) must never inflate "team size" on the dashboard.
+  const teamSize = db.prepare('SELECT COUNT(*) AS n FROM recipients').get().n;
 
   // Trend: per-slider averages for every past cycle with enough responses.
   const cycles = db
@@ -333,6 +336,7 @@ app.get('/api/admin/overview', requireAdmin, (req, res) => {
     window: win,
     minResponsesToShow: MIN_RESPONSES_TO_SHOW,
     tokens,
+    teamSize,
     count: agg.count,
     visible,
     averages: visible ? agg.averages : null,
