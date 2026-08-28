@@ -67,6 +67,15 @@ export function sheetUrl() {
 
 const columnsOf = (table) => db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
 
+// Empty sheet cells map back to NULL — except for NOT NULL columns, where
+// they must come back as ''. Getting this wrong silently drops whole rows on
+// restore (INSERT OR IGNORE swallows the constraint error): that is exactly
+// how a real response with an empty comment box kept disappearing.
+const notNullOf = (table) => Object.fromEntries(
+  db.prepare(`PRAGMA table_info(${table})`).all().map((c) => [c.name, !!c.notnull])
+);
+const cellToDb = (v, notnull) => (v === '' || v === undefined ? (notnull ? '' : null) : v);
+
 function dumpTable(table) {
   const cols = columnsOf(table);
   const rows = db.prepare(`SELECT * FROM ${table}`).all();
@@ -92,9 +101,10 @@ async function absorbSheetRows(id, table) {
       const localKeys = new Set(
         db.prepare('SELECT * FROM responses').all().map((r) => key(cols.map((c) => r[c])))
       );
+      const nn = notNullOf('responses');
       const ins = db.prepare(`INSERT INTO responses (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`);
       for (const row of rows) {
-        const vals = cols.map((c) => { const v = row[header.indexOf(c)]; return v === '' || v === undefined ? null : v; });
+        const vals = cols.map((c) => cellToDb(row[header.indexOf(c)], nn[c]));
         const k = key(vals);
         if (!localKeys.has(k)) {
           ins.run(...vals);
@@ -360,11 +370,9 @@ export async function restoreFromSheet() {
       `INSERT OR IGNORE INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`
     );
     let skipped = 0;
+    const nn = notNullOf(table);
     for (const row of rows) {
-      const vals = cols.map((c) => {
-        const v = row[header.indexOf(c)];
-        return v === '' || v === undefined ? null : v;
-      });
+      const vals = cols.map((c) => cellToDb(row[header.indexOf(c)], nn[c]));
       // Count what actually landed: INSERT OR IGNORE swallows constraint
       // conflicts silently, and a skipped row here is potential data loss.
       try {
