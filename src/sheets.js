@@ -73,7 +73,55 @@ function dumpTable(table) {
   return [cols, ...rows.map((r) => cols.map((c) => (r[c] === null || r[c] === undefined ? '' : String(r[c]))))];
 }
 
+// POSTMORTEM 2026-08-28: a full-tab rewrite from "whichever instance flushes
+// last" erased a real response. Cloud Run instance churn forks the SQLite
+// file — two lineages can each hold rows the other lacks, and a clobbering
+// rewrite deletes the difference. For append-only tables the mirror must
+// therefore MERGE before it writes: absorb any sheet rows missing locally,
+// then write the union. Rows are matched by full content (ids fork across
+// lineages, so they cannot be the key).
+async function absorbSheetRows(id, table) {
+  try {
+    const data = await gapi(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(table)}!A1:ZZ10000`);
+    const [header, ...rows] = data.values || [];
+    if (!header || !rows.length) return;
+    const norm = (v) => (v === null || v === undefined || v === '' ? '' : String(v));
+    if (table === 'responses') {
+      const cols = columnsOf('responses').filter((c) => c !== 'id' && header.includes(c));
+      const key = (vals) => JSON.stringify(vals.map(norm));
+      const localKeys = new Set(
+        db.prepare('SELECT * FROM responses').all().map((r) => key(cols.map((c) => r[c])))
+      );
+      const ins = db.prepare(`INSERT INTO responses (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`);
+      for (const row of rows) {
+        const vals = cols.map((c) => { const v = row[header.indexOf(c)]; return v === '' || v === undefined ? null : v; });
+        const k = key(vals);
+        if (!localKeys.has(k)) {
+          ins.run(...vals);
+          localKeys.add(k);
+          console.log('[sheets] re-absorbed a response the local DB was missing');
+        }
+      }
+    } else if (table === 'tokens') {
+      const idx = Object.fromEntries(['token_hash', 'cycle', 'used', 'opened'].map((c) => [c, header.indexOf(c)]));
+      if (idx.token_hash < 0) return;
+      const ins = db.prepare('INSERT OR IGNORE INTO tokens (token_hash, cycle, used, opened) VALUES (?, ?, ?, ?)');
+      const bump = db.prepare('UPDATE tokens SET used = MAX(used, ?), opened = MAX(opened, ?) WHERE token_hash = ?');
+      for (const row of rows) {
+        const hash = row[idx.token_hash];
+        if (!hash) continue;
+        ins.run(hash, row[idx.cycle] || '', Number(row[idx.used] || 0), Number(row[idx.opened] || 0));
+        bump.run(Number(row[idx.used] || 0), Number(row[idx.opened] || 0), hash);
+      }
+    }
+  } catch (e) {
+    console.warn(`[sheets] ${table} merge skipped:`, e.message);
+  }
+}
+
 async function syncTable(id, table) {
+  // Append-only tables: union with what the sheet already holds, never shrink.
+  if (table === 'responses' || table === 'tokens') await absorbSheetRows(id, table);
   const values = dumpTable(table);
   await gapi(
     `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(table)}!A1:ZZ10000:clear`,
@@ -311,13 +359,20 @@ export async function restoreFromSheet() {
     const ins = db.prepare(
       `INSERT OR IGNORE INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`
     );
+    let skipped = 0;
     for (const row of rows) {
       const vals = cols.map((c) => {
         const v = row[header.indexOf(c)];
         return v === '' || v === undefined ? null : v;
       });
-      try { ins.run(...vals); restored++; } catch (e) { console.warn(`[sheets] skipped a ${table} row: ${e.message}`); }
+      // Count what actually landed: INSERT OR IGNORE swallows constraint
+      // conflicts silently, and a skipped row here is potential data loss.
+      try {
+        const r = ins.run(...vals);
+        if (r.changes > 0) restored++; else skipped++;
+      } catch (e) { skipped++; console.warn(`[sheets] skipped a ${table} row: ${e.message}`); }
     }
+    if (skipped) console.warn(`[sheets] WARNING: ${skipped} ${table} row(s) did NOT restore`);
   }
   console.log(`[sheets] restored ${restored} rows from "${SPREADSHEET_NAME}"`);
   return restored > 0;
