@@ -124,14 +124,24 @@ async function absorbSheetRows(id, table) {
         bump.run(Number(row[idx.used] || 0), Number(row[idx.opened] || 0), hash);
       }
     }
+    return true;
   } catch (e) {
-    console.warn(`[sheets] ${table} merge skipped:`, e.message);
+    console.warn(`[sheets] ${table} merge FAILED:`, e.message);
+    return false;
   }
 }
 
 async function syncTable(id, table) {
   // Append-only tables: union with what the sheet already holds, never shrink.
-  if (table === 'responses' || table === 'tokens') await absorbSheetRows(id, table);
+  // If the merge fails we must NOT write — the rewrite is destructive, and
+  // pushing our partial view would erase whatever the sheet uniquely holds.
+  // (That is exactly how a recovered response got deleted a second time.)
+  if (table === 'responses' || table === 'tokens') {
+    if (!(await absorbSheetRows(id, table))) {
+      console.warn(`[sheets] ${table} write ABORTED — refusing to overwrite the sheet with an unmerged view`);
+      return;
+    }
+  }
   const values = dumpTable(table);
   await gapi(
     `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(table)}!A1:ZZ10000:clear`,
