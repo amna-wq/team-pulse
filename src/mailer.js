@@ -149,7 +149,7 @@ export function renderInviteEmail({ link, closes }) {
         Your monthly pulse is open!
       </h1>
       <p style="margin:6px 0 0;font-family:'Nunito',Arial,sans-serif;font-size:15px;color:#6d6b78;">
-        3 minutes · totally anonymous · closes in 48 hours
+        3 minutes · totally anonymous · ${closesText ? `closes ${closesText}` : 'closes in 48 hours'}
       </p>
     </td></tr>
 

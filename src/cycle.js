@@ -16,18 +16,28 @@ export function windowFor(cycle) {
   return { opens, closes };
 }
 
-export function getOverride(cycle) {
-  const row = db.prepare('SELECT state FROM window_overrides WHERE cycle = ?').get(cycle);
-  return row ? row.state : null;
+// An override may carry an expiry (`until`, ISO timestamp). A timed "open"
+// override reopens the window until that moment and then falls back to the
+// automatic schedule by itself — no one has to remember to close it, and the
+// invite email prints the real deadline instead of the original one.
+export function getOverride(cycle, now = new Date()) {
+  const row = db.prepare('SELECT state, until FROM window_overrides WHERE cycle = ?').get(cycle);
+  if (!row) return null;
+  if (row.until) {
+    const u = new Date(row.until);
+    if (Number.isNaN(u.getTime()) || now >= u) return null; // malformed or expired → no override
+  }
+  return { state: row.state, until: row.until || null };
 }
 
-export function setOverride(cycle, state) {
+export function setOverride(cycle, state, until = null) {
   if (state === null) {
     db.prepare('DELETE FROM window_overrides WHERE cycle = ?').run(cycle);
   } else {
     db.prepare(
-      'INSERT INTO window_overrides (cycle, state) VALUES (?, ?) ON CONFLICT(cycle) DO UPDATE SET state = excluded.state'
-    ).run(cycle, state);
+      `INSERT INTO window_overrides (cycle, state, until) VALUES (?, ?, ?)
+       ON CONFLICT(cycle) DO UPDATE SET state = excluded.state, until = excluded.until`
+    ).run(cycle, state, until);
   }
 }
 
@@ -36,13 +46,14 @@ export function setOverride(cycle, state) {
 // automatic schedule decides.
 export function windowState(now = new Date()) {
   const cycle = currentCycle(now);
-  const { opens, closes } = windowFor(cycle);
-  const override = getOverride(cycle);
+  let { opens, closes } = windowFor(cycle);
+  const override = getOverride(cycle, now);
   let open;
   let mode;
   if (override) {
-    open = override === 'open';
+    open = override.state === 'open';
     mode = 'override';
+    if (open && override.until) closes = new Date(override.until);
   } else if (DEMO_MODE) {
     open = true;
     mode = 'demo';
