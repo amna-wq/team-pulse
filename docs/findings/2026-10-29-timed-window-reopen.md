@@ -68,9 +68,38 @@ Live HTTP on a throwaway local instance (port 8091, isolated data + export dirs)
 Rollback: `POST /api/admin/window {state:null}` → window reverts to closed immediately.
 Code rollback: revert the PR; the extra column is harmless.
 
+## Production execution — 2026-10-29 19:58 PKT (revision be-your-best-00016-m68)
+
+```
+1) post-deploy: window open=False mode=auto | Oct responses: 4 | team: 23
+   before: links 24 | send_count 24 | unsent: hamzamunir@, mustafa@, waleed@
+2) POST /api/admin/window {state:'open', until:'2026-10-30T18:59:00Z'}
+   -> open=True mode=override closes=2026-10-30T18:59:00.000Z
+3) /admin/email-preview on prod: "Closes Friday, October 30 at 11:59 PM"
+4) POST /api/cron/tick -> {"ok":true,"ranAt":"2026-10-29T14:58:18.625Z"}
+   links 24 -> 27 | send_count 24 -> 27
+   emailed today: hamzamunir@, mustafa@, waleed@ | anyone else re-stamped: none | failures: none
+5) window now: open=True mode=override closes=2026-10-30T18:59:00.000Z
+```
+
+## Infra regression found while deploying (needs Khalid)
+
+The build pipeline used since August broke: the Cloud Build worker
+(`236964076283-compute@developer.gserviceaccount.com`) no longer has read on
+`gs://newdatonproject_cloudbuild` nor write on Artifact Registry
+`cloud-run-source-deploy` (project IAM listing 2026-10-29: `artifactregistry.writer`
+is held only by the Google-managed `236964076283@cloudbuild.gserviceaccount.com`,
+which Cloud Build refuses as an explicit build SA). Build `95b073a7` showed the
+docker step SUCCESS and overall FAILURE with no image pushed. Workaround used:
+object-level ACL grant on the staged tarball + build as
+`newdatonproject@appspot.gserviceaccount.com` (editor) with CLOUD_LOGGING_ONLY —
+build `df811ab3`, SUCCESS, 1 image pushed. Proper fix: restore
+`roles/artifactregistry.writer` (repo `cloud-run-source-deploy`) and
+`roles/storage.objectViewer` (bucket `newdatonproject_cloudbuild`) to the compute SA.
+
 ## Not verified / open
 
-- Prod execution results are recorded below once run.
+- Receipt of the 3 emails in inboxes (Gmail Sent folder is the audit source).
 - Anonymity caveat (accepted by Amna): with only 3 people invited into a 1-day reopen,
   any late October rows are attributable to that group of 3, not to an individual.
 - Sheet mirror of `window_overrides` gains a column; not exercised locally (no Google
