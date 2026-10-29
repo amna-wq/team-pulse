@@ -69,10 +69,12 @@ db.exec(`
     published_at TEXT
   );
 
-  -- Admin override for the survey window ('open' | 'closed'); absence = automatic schedule.
+  -- Admin override for the survey window ('open' | 'closed'); absence = automatic
+  -- schedule. until (ISO, optional) makes it a timed override that expires by itself.
   CREATE TABLE IF NOT EXISTS window_overrides (
     cycle TEXT PRIMARY KEY,
-    state TEXT NOT NULL CHECK (state IN ('open', 'closed'))
+    state TEXT NOT NULL CHECK (state IN ('open', 'closed')),
+    until TEXT
   );
 
   -- Email roster for monthly invites. ANONYMITY NOTE: this stores WHO gets

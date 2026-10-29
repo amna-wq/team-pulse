@@ -45,6 +45,7 @@ for (const sql of [
   'ALTER TABLE recipients ADD COLUMN name TEXT',
   'ALTER TABLE recipients ADD COLUMN name_source TEXT',
   'ALTER TABLE recipients ADD COLUMN role TEXT',
+  'ALTER TABLE window_overrides ADD COLUMN until TEXT',
   'ALTER TABLE responses ADD COLUMN motivation TEXT',
   'ALTER TABLE responses ADD COLUMN motivation_why TEXT',
   'ALTER TABLE responses ADD COLUMN blocker_other TEXT',
@@ -383,7 +384,20 @@ app.post('/api/admin/window', requireAdmin, (req, res) => {
   if (![null, 'open', 'closed'].includes(state)) {
     return res.status(400).json({ error: "state must be 'open', 'closed', or null (automatic)." });
   }
-  setOverride(currentCycle(), state);
+  // Optional expiry for a timed reopen: { state: 'open', until: '<ISO>' }.
+  let until = null;
+  if (req.body?.until != null) {
+    const t = new Date(req.body.until);
+    if (Number.isNaN(t.getTime())) return res.status(400).json({ error: 'until must be an ISO timestamp.' });
+    if (t <= new Date()) return res.status(400).json({ error: 'until must be in the future.' });
+    // Overrides are keyed to the current month; past the month boundary the
+    // window would shut anyway while emails still printed the later date.
+    if (currentCycle(t) !== currentCycle()) {
+      return res.status(400).json({ error: 'until must fall within the current month.' });
+    }
+    until = t.toISOString();
+  }
+  setOverride(currentCycle(), state, until);
   queueSync('window_overrides');
   res.json({ ok: true, window: windowState() });
 });
