@@ -73,15 +73,41 @@ PASS  no notice box when notice is absent
 ```
 `node --check` clean on server.js, src/mailer.js, src/sheets.js.
 
-## Not yet done / blocked
+## Production logs (read after re-auth) — confirms the chain
 
-- **Deploy blocked**: `gcloud auth` expired; build + `gcloud run deploy` need Amna to
-  run `gcloud auth login`.
-- After deploy, prod verification plan: tokens tab regains a header on first flush;
-  mint 1 token via `/api/admin/tokens` → tokens tab shows 1 row → `/api/survey/state`
-  valid → force a restart → token still valid (restore round-trip).
-- Re-issuing the 23 links is an outward-facing send: needs Amna's explicit go.
-- Prod logs for the 09:00 failure: pending auth.
+```
+04:00:44  [sheets] restored 69 rows          <- zero tokens: the tab was already blank
+04:00:54  [sheets] tokens write ABORTED — refusing to overwrite the sheet with an unmerged view
+04:00:56  [auto-email] 2026-11: sent 23 invites
+04:05:46 / 04:10:48 / 04:15:46  tokens write ABORTED (every 5-min sync)
+```
+
+## Production execution — 2026-11-27 (builds e54f7a34 → 39eee980, with review fixes)
+
+Roster updated by Amna to 24 (−mirela, +attila, +nicola; titles refreshed), deployed in
+the same revision. Verification before resending:
+```
+roster: 24 | mirela gone: True | attila+nicola present: True
+window: open=True mode=auto closes=2026-11-29T04:00:00Z
+minted 1 test token -> SHEET tokens tab: header id,token_hash,cycle,used,opened | rows = 1
+link valid before restart: valid=True
+forced cold restart -> after restart: valid=True  <-- PERSISTED ; tokens in DB: 1
+```
+Resend (Amna: "go"), notice: "Quick fix: if you got a Team Pulse email this morning,
+that link did not work — this one does. Same 3 minutes, same anonymity. Sorry for the
+double email."
+```
+POST /api/admin/invites/resend -> {"ok":true,"cycle":"2026-11","newLinks":24,"sent":24,"failed":[]}
+links this cycle in DB: 25 (24 + 1 test) | SHEET tokens tab rows: 25
+```
+One stray unused test token remains for 2026-11 (raw value never shared); it expires
+with the window.
+
+## Not verified / open
+
+- Delivery into inboxes (Gmail Sent folder is the audit source).
+- The original blanking event (between Sheet rev 8311 and 8731, i.e. between 29 Oct and
+  27 Nov 09:00) has no log receipt — only its consequence is logged.
 
 ## Rollback
 
