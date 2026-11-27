@@ -93,7 +93,12 @@ async function absorbSheetRows(id, table) {
   try {
     const data = await gapi(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(table)}!A1:ZZ10000`);
     const [header, ...rows] = data.values || [];
-    if (!header || !rows.length) return;
+    // An empty tab means there is nothing to merge — that is a SUCCESSFUL
+    // merge, and the write must go ahead. Returning undefined here used to
+    // read as "merge failed", so an emptied tab could never be refilled:
+    // every write was aborted and every cold boot restored zero rows.
+    // (2026-11-27: the whole tokens table was lost this way.)
+    if (!header || !rows.length) return true;
     const norm = (v) => (v === null || v === undefined || v === '' ? '' : String(v));
     if (table === 'responses') {
       const cols = columnsOf('responses').filter((c) => c !== 'id' && header.includes(c));
@@ -114,7 +119,13 @@ async function absorbSheetRows(id, table) {
       }
     } else if (table === 'tokens') {
       const idx = Object.fromEntries(['token_hash', 'cycle', 'used', 'opened'].map((c) => [c, header.indexOf(c)]));
-      if (idx.token_hash < 0) return;
+      if (idx.token_hash < 0) {
+        // A header without token_hash is a corrupt tab: nothing usable to merge,
+        // and overwriting it with the DB is the right recovery. Explicit `true` —
+        // a bare `return` here would read as "merge failed" and abort forever.
+        console.warn('[sheets] tokens tab has no token_hash column — treating as empty');
+        return true;
+      }
       const ins = db.prepare('INSERT OR IGNORE INTO tokens (token_hash, cycle, used, opened) VALUES (?, ?, ?, ?)');
       const bump = db.prepare('UPDATE tokens SET used = MAX(used, ?), opened = MAX(opened, ?) WHERE token_hash = ?');
       for (const row of rows) {
@@ -143,13 +154,20 @@ async function syncTable(id, table) {
     }
   }
   const values = dumpTable(table);
-  await gapi(
-    `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(table)}!A1:ZZ10000:clear`,
-    { method: 'POST', body: {} }
-  );
+  // Write first, clear second — never the other way round. A clear that
+  // succeeds followed by a write that fails leaves the tab empty, and the
+  // next cold boot restores "nothing" and makes the loss permanent. Writing
+  // over A1 replaces the live rows in place; only the stale tail below the
+  // new data is cleared afterwards, so a failure at any point leaves either
+  // the old data or the new data on the sheet — never a blank tab.
   await gapi(
     `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(table)}!A1?valueInputOption=RAW`,
     { method: 'PUT', body: { values } }
+  );
+  const firstStaleRow = values.length + 1;
+  await gapi(
+    `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(table)}!A${firstStaleRow}:ZZ10000:clear`,
+    { method: 'POST', body: {} }
   );
 }
 
