@@ -500,6 +500,39 @@ function recordSendResults(results) {
 }
 
 
+// Re-issue this month's invites to EVERYONE on the roster — the recovery path
+// when links already sent have been invalidated (2026-11-27: the tokens table
+// was lost, so all 23 links died). Clears the per-recipient sent-stamps for
+// the open window and runs the normal send; the once-per-cycle claim stays,
+// so only the stamps decide who gets mail. Window must be open. An optional
+// notice is printed at the top of the email so the team knows why a second
+// one arrived.
+app.post('/api/admin/invites/resend', requireAdmin, async (req, res) => {
+  const win = windowState();
+  if (!win.open) return res.status(400).json({ error: 'The survey window is closed — nothing to resend into.' });
+  if (!mailConfigured()) return res.status(400).json({ error: 'Email is not connected.' });
+  // Refuse BEFORE touching the stamps: every condition that makes autoEmailTick
+  // bail silently would otherwise leave the roster un-stamped (so the next
+  // scheduled tick resends everyone) while this reply claimed "sent: 0".
+  if (process.env.AUTO_EMAIL !== 'true' || DEMO_MODE) {
+    return res.status(400).json({ error: 'Sending is disabled here (AUTO_EMAIL is not true, or demo mode).' });
+  }
+  if (emailTickBusy) return res.status(409).json({ error: 'A send is already in progress — try again in a minute.' });
+  const notice = String(req.body?.notice || '').trim().slice(0, 300) || null;
+  const tokensBefore = db.prepare('SELECT COUNT(*) AS n FROM tokens WHERE cycle = ?').get(win.cycle).n;
+  db.prepare('UPDATE recipients SET last_sent_at = NULL, last_error = NULL').run();
+  queueSync('recipients');
+  try {
+    await autoEmailTick({ notice });
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+  const tokensAfter = db.prepare('SELECT COUNT(*) AS n FROM tokens WHERE cycle = ?').get(win.cycle).n;
+  const sent = db.prepare('SELECT COUNT(*) AS n FROM recipients WHERE last_sent_at IS NOT NULL').get().n;
+  const failed = db.prepare('SELECT email, last_error FROM recipients WHERE last_error IS NOT NULL').all();
+  res.json({ ok: true, cycle: win.cycle, newLinks: tokensAfter - tokensBefore, sent, failed });
+});
+
 app.post('/api/admin/email-test', requireAdmin, async (req, res) => {
   const email = String(req.body?.email || '').trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email.' });
@@ -560,7 +593,7 @@ app.get('/admin/email-preview', (req, res) => {
 //      Sheet BEFORE any email goes out, and per-recipient last_sent_at
 //      stamps cap the blast radius of any future failure to one copy each.
 let emailTickBusy = false;
-async function autoEmailTick() {
+async function autoEmailTick({ notice = null } = {}) {
   if (process.env.AUTO_EMAIL !== 'true' || DEMO_MODE || !mailConfigured()) return;
   if (emailTickBusy) return;
   emailTickBusy = true;
@@ -599,7 +632,7 @@ async function autoEmailTick() {
 
     const emails = pendingEmails();
     if (!emails.length) return;
-    const result = await sendInvites(emails);
+    const result = await sendInvites(emails, { notice });
     recordSendResults(result.results);
     db.prepare('UPDATE email_log SET sent_count = sent_count + ? WHERE cycle = ?')
       .run(result.sent, win.cycle);

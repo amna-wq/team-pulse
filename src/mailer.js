@@ -118,7 +118,11 @@ function mintToken(cycle) {
 // inline styles (works everywhere); the floating emoji + fade-in animations
 // run in Apple Mail / iOS Mail and degrade to a static (still cute) email in
 // Gmail and Outlook, which ignore <style> keyframes.
-export function renderInviteEmail({ link, closes }) {
+const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// `notice` (optional) is printed at the top of the card — used when invites
+// have to be re-issued, so the team knows why a second email arrived.
+export function renderInviteEmail({ link, closes, notice = null }) {
   const closesText = closes
     ? new Date(closes).toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit', day: 'numeric', month: 'long' })
     : null;
@@ -154,6 +158,9 @@ export function renderInviteEmail({ link, closes }) {
     </td></tr>
 
     <tr><td class="tp-card" style="background-color:#fffefc;border:1px solid #e6e5ef;border-radius:22px;padding:28px;box-shadow:0 10px 30px rgba(84,87,214,0.08);">
+      ${notice ? `<p style="margin:0 0 16px;padding:12px 14px;background-color:#fff4e5;border:1px solid #f3c76b;border-radius:12px;font-family:'Nunito',Arial,sans-serif;font-size:14px;line-height:1.5;color:#7a4f00;">
+        ${escHtml(notice)}
+      </p>` : ''}
       <p style="margin:0 0 14px;font-family:'Nunito',Arial,sans-serif;font-size:16px;line-height:1.6;color:#34323b;">
         Hey! 👋 It's that time of the month — tell us how work <em>actually</em> feels right now.
         Workload, meetings, tools, anything bothering you. Management reads every single word.
@@ -200,14 +207,14 @@ export function renderInviteEmail({ link, closes }) {
 </html>`;
 }
 
-function inviteText(link, closes) {
-  return `Your monthly Team Pulse is open!\n\n3 minutes, totally anonymous. This single-use link is yours alone — once submitted it is only marked "used", nothing connects it to your answers.\n\nTake the pulse: ${link}\n${closes ? `\nCloses: ${new Date(closes).toLocaleString()}` : ''}`;
+function inviteText(link, closes, notice = null) {
+  return `${notice ? notice + '\n\n' : ''}Your monthly Team Pulse is open!\n\n3 minutes, totally anonymous. This single-use link is yours alone — once submitted it is only marked "used", nothing connects it to your answers.\n\nTake the pulse: ${link}\n${closes ? `\nCloses: ${new Date(closes).toLocaleString()}` : ''}`;
 }
 
 // Send one invite per address. The token→email pairing lives only inside this
 // loop and is gone when it finishes — deliberately not logged, not stored.
 // Per-email results carry ONLY delivery status (sent/failed), never the token.
-export async function sendInvites(emails) {
+export async function sendInvites(emails, { notice = null } = {}) {
   const cycle = currentCycle();
   const { closes } = windowState();
   const failed = [];
@@ -221,8 +228,8 @@ export async function sendInvites(emails) {
         from: fromAddress(),
         to: email,
         subject: '📮 Your monthly Team Pulse is open (3 min, anonymous)',
-        html: renderInviteEmail({ link, closes }),
-        text: inviteText(link, closes),
+        html: renderInviteEmail({ link, closes, notice }),
+        text: inviteText(link, closes, notice),
       });
       sent++;
       results.push({ email, ok: true });
